@@ -1,49 +1,67 @@
-# EnglishCode - Programming in Plain English
+# EnglishCode
 
-> **Code in English. Build real applications. No programming syntax required.**
+**A programming language in plain English. Write code like you speak, and build real applications.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![macOS](https://img.shields.io/badge/macOS-Supported-green.svg)](https://www.apple.com/macos/)
+EnglishCode lets you write programs, databases, web servers, APIs, and user
+authentication using natural English sentences. There is no syntax to memorize
+beyond the words you already use. Under the hood it compiles down to Rust and
+SQLite, so programs are fast and data is persisted on disk.
 
----
-
-## 🎯 What is EnglishCode?
-
-EnglishCode is a revolutionary programming language where **English IS the code**. No curly braces, no semicolons, no cryptic syntax—just plain English sentences that execute as real programs.
-
-### Why EnglishCode?
-
-- **🌍 Natural Language** - Write code like you speak
-- **⚡ 10x Less Code** - Say more with less
-- **🎓 Zero Learning Curve** - If you can write English, you can code
-- **📱 Mobile Apps** - Build iOS & Android apps from English
-- **🔐 Authentication** - Built-in signup/login/sessions
-- **🔥 Production Ready** - Full database, web server, and CRUD operations
-- **🚀 Native Performance** - Rust-powered runtime, blazingly fast
-- **✨ Smart Spell-Checking** - Auto-corrects typos automatically
-
----
-
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/englishcode.git
-cd englishcode
-
-# Build from source
-cargo build --release
-
-# Add to PATH
-sudo cp target/release/engcode /usr/local/bin/
+```englishcode
+show "Hello, World!"
 ```
 
-### Your First Program
+```bash
+engcode run hello.eng
+```
 
-Create a file called `hello.eng`:
+```
+→ Running hello.eng
+
+Hello, World!
+
+Program completed successfully!
+```
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Core Language](#core-language)
+- [Databases](#databases)
+- [Authentication](#authentication)
+- [Web Server & APIs](#web-server--apis)
+- [Server-Side Templating](#server-side-templating)
+- [Mobile](#mobile)
+- [Architecture](#architecture)
+- [Running Tests](#running-tests)
+- [Examples](#examples)
+- [Known Limitations](#known-limitations)
+- [Contributing](#contributing)
+- [Support](#support)
+
+---
+
+## Quick Start
+
+### Requirements
+
+- [Rust](https://www.rust-lang.org/) (1.70 or newer)
+- macOS or Linux
+
+### Install
+
+```bash
+git clone https://github.com/ikaydreams-dev/OpenSoftware.git
+cd OpenSoftware
+cargo build --release
+cp target/release/engcode /usr/local/bin/
+```
+
+### Your first program
+
+Create `hello.eng`:
 
 ```
 show "Hello, World!"
@@ -55,29 +73,127 @@ Run it:
 engcode run hello.eng
 ```
 
-Output:
-```
-→ Running hello.eng
+The CLI has three commands:
 
-Hello, World!
-
-Program completed successfully!
-```
+| Command | Purpose |
+|---------|---------|
+| `engcode run <file>.eng` | Parse, analyze, and execute a program |
+| `engcode mobile init/build/run-ios/run-android` | Generate and build mobile apps |
+| `engcode version` | Print the version |
 
 ---
 
-## 📚 Language Features
+## Core Language
 
-### 1. **Variables**
+### Variables
 
 ```
 set name to "Alice"
 set age to 30
-set active to true
 let score = 95.5
+make active to true
+store count to 100
+save total to 500
 ```
 
-### 2. **Databases**
+### Data types
+
+Numbers, strings, booleans, `null`, arrays, and objects:
+
+```
+set colors to ["red", "green", "blue"]
+set first to colors[0]
+
+set user to {name: "Alice", age: 25}
+show user.name
+```
+
+### Control flow
+
+```
+if score greaterthan 90 then
+  show "A"
+else if score greaterthan 80 then
+  show "B"
+else
+  show "C"
+end
+
+while counter lessthan 10
+  set counter to counter plus 1
+end
+
+for i from 1 to 5
+  show i
+end
+
+for each color in colors
+  show color
+end
+```
+
+Comparison words: `greaterthan`, `lessthan`, `equalto`, `and`, `or`, `not`.
+
+### Functions
+
+```
+define function greet with name
+  show "Hello, {name}!"
+  return "done"
+end
+```
+
+### Error handling
+
+```
+try
+  throw "Something went wrong"
+catch
+  show "Caught an error"
+end
+```
+
+### Comments
+
+```
+# This is a comment
+show "Hi"  # inline comments work too
+```
+
+### String methods
+
+You can chain methods on strings and arrays:
+
+```
+set text to "  Hello World  "
+set upper to text.uppercase().trim()
+set words to text.split(" ")
+
+set items to [3, 1, 2]
+items.push(4)
+set total to items.length()
+```
+
+Methods available include `uppercase`, `lowercase`, `trim`, `split`, `replace`,
+`length`, `contains`, `sort`, `reverse`, `first`, `last`, `push`, and `pop`.
+
+### Output
+
+```
+show "Result: {total}"
+```
+
+Strings support `{variable}` interpolation.
+
+---
+
+## Databases
+
+EnglishCode ships with a built-in SQLite database. No setup, drivers, or
+connection strings are required — databases are created and stored in the
+`databases/` directory.
+
+### Create a database and collections
 
 ```
 create a database called "MyApp"
@@ -88,278 +204,223 @@ create these collections in it
   orders
 ```
 
-### 3. **Insert Data (CRUD)**
+> Note: declaring collections is idempotent. Each run resets the listed
+> collections before your inserts, so re-running a script never duplicates rows.
+
+### Insert
+
+`insert`, `add`, and `put` all add rows:
 
 ```
-insert into users with name "John" and age 28 and email "john@example.com"
-
-add to products with title "Laptop" and price 999.99 and stock 50
+insert into users with name "Alice" and age 28 and active true
+add products with title "Laptop" and price 999.99 and stock 50
+put into orders with user_id 1 and total 199.50
 ```
 
-### 4. **Read Data**
+### Select
+
+`select`, `get`, `find`, and `fetch` all read data:
 
 ```
 select all from users
-
-get all from products
+select all from users where age greaterthan 18
 ```
 
-### 5. **Display Output**
+### Update / Delete with WHERE clauses
+
+`update`, `change`, and `modify` filter rows with `where`:
 
 ```
-show "Processing complete!"
-show "Total users: 150"
+update users with age 29 where name equalto "Alice"
+delete from users where active equalto false
+remove from products where price lessthan 10
+```
+
+Full CRUD with `where age greaterthan 18` style filters is supported.
+
+---
+
+## Authentication
+
+Built-in `signup` / `login` / `logout` persists users to the current database:
+
+```
+signup "sarah" with email "sarah@test.com" and password "secret123"
+login "sarah" with password "secret123"
+logout
+```
+
+After `login`, the interpreter tracks `current_user`, `logged_in`, and
+`session_token`. Passwords are hashed before storage, and session tokens are
+issued for logged-in users.
+
+---
+
+## Web Server & APIs
+
+Create a server and register routes with plain English:
+
+```
+create a web server on port 3000
+
+add route get "/api/users" returning "User list"
+add route get "/api/data" returning rows from users
+add route post "/api/users" returning "User created"
+
+start the server
+```
+
+- **Static routes** return a JSON message: `{"message": "..."}`
+- **Data routes** (`returning rows from <collection>`) query the live database
+  on every request and return the rows as JSON: `{"data": [...]}`
+
+`start the server` runs until you press `Ctrl+C` (graceful shutdown). To have
+the program finish on its own, give it a lifetime:
+
+```
+start the server for 10 seconds
 ```
 
 ---
 
-## 💻 Complete Example
+## Server-Side Templating
 
-Here's a real working example (`examples/user-system.eng`):
+Any HTML page can embed live database data with `{{collection_name}}` markers.
+When the page is served, the marker is replaced with an HTML table of that
+collection's rows.
 
 ```
-create a database called "UserSystem"
-
+create a web server on port 3000
+create a database called "MyApp"
 create these collections in it
   users
-  sessions
-  activity_log
+insert into users with name "Alice" and age 28
 
-set admin to "Alice"
-set status to "active"
+create page called "home"
+add heading "Our users"
+add paragraph "{{users}}"
+render page "home"
 
-insert into users with name "Alice" and role "admin" and status "active"
-insert into users with name "Bob" and role "user" and status "active"
-insert into users with name "Charlie" and role "moderator" and status "pending"
-
-show "User system initialized!"
-
-select all from users
-
-show "Setup complete!"
+add route get "/api/users" returning rows from users
+start the server
 ```
 
-Run it:
+Visiting `http://localhost:3000/` serves `public/home.html` with a rendered
+table of the `users` collection. Visiting `/api/users` returns the same data
+as JSON.
+
+---
+
+## Mobile
+
+`engcode mobile` transpiles EnglishCode into a React Native project:
 
 ```bash
-engcode run examples/user-system.eng
+engcode mobile init
+engcode mobile build app.eng
+engcode mobile run-ios
+engcode mobile run-android
 ```
 
-Output:
+This generates runnable React Native code (components, screens, styles). The
+final `.ipa` / `.apk` build still requires Node.js, the React Native CLI, and
+Xcode / Android Studio — see `MOBILE_FEATURES.md` for details.
+
+---
+
+## Architecture
+
+The project is a Rust workspace of focused crates:
 
 ```
-→ Running examples/user-system.eng
+crates/
+├── engcode-lexer/      Tokenization + smart spell-checking
+├── engcode-parser/     Recursive-descent parser -> AST
+├── engcode-analyzer/   Semantic analysis + symbol tables
+├── engcode-runtime/    Interpreter / VM
+├── engcode-stdlib/     Standard library (SQLite, web server, auth, HTML)
+├── engcode-mobile/     React Native transpiler
+└── engcode-cli/        Command-line interface
+```
 
-✓ Created database UserSystem
-  ✓ Created collection users
-  ✓ Created collection sessions
-  ✓ Created collection activity_log
-  → Set admin = Alice
-  → Set status = active
-  ✓ Inserted into users
-  ✓ Inserted into users
-  ✓ Inserted into users
-User system initialized!
+Supporting folders:
 
-→ Found 3 rows in users:
-  1. {"name": "Alice", "role": "admin", "status": "active"}
-  2. {"name": "Bob", "role": "user", "status": "active"}
-  3. {"name": "Charlie", "role": "moderator", "status": "pending"}
-
-Setup complete!
-
-Program completed successfully!
+```
+examples/     Run example programs
+databases/    SQLite database files (auto-created at runtime)
+public/       Rendered HTML pages served by the web server
 ```
 
 ---
 
-## 🎨 Multiple Ways to Say Things
-
-EnglishCode understands natural variations:
-
-### Creating Variables
-
-```
-set name to "John"
-let age = 25
-make status to true
-store count = 100
-save total to 500
-```
-
-### Database Operations
-
-```
-insert into users...
-add to users...
-put into users...
-```
-
-```
-select all from users
-get all from users
-find all from users
-fetch all from users
-```
-
-```
-update users...
-change users...
-modify users...
-```
-
-```
-delete from users
-remove from users
-```
-
----
-
-## 🏗️ Architecture
-
-EnglishCode is built with:
-
-- **Runtime:** Rust (fast, safe, native binaries)
-- **Database:** SQLite (built-in, no setup required)
-- **Parser:** Custom recursive descent parser
-- **Lexer:** Smart tokenizer with spell-checking
-- **Analyzer:** Semantic analysis with symbol tables
-
-### Project Structure
-
-```
-englishcode/
-├── crates/
-│   ├── engcode-lexer/      # Tokenization + spell-checking
-│   ├── engcode-parser/     # AST generation
-│   ├── engcode-analyzer/   # Semantic analysis
-│   ├── engcode-runtime/    # Interpreter/VM
-│   ├── engcode-stdlib/     # Standard library (DB, IO)
-│   └── engcode-cli/        # Command-line interface
-├── examples/               # Example .eng programs
-├── databases/             # SQLite databases (auto-created)
-└── README.md             # This file
-```
-
----
-
-## 🧪 Running Tests
+## Running Tests
 
 ```bash
-# Run all tests
+# Run the entire test suite
 cargo test
 
-# Run specific test suite
+# Run a specific crate's tests
 cargo test --package engcode-lexer
 cargo test --package engcode-parser
 cargo test --package engcode-runtime
-
-# Run with output
-cargo test -- --nocapture
 ```
 
-Current test status: **26/26 tests passing** ✅
+Current status: **54 tests passing**.
 
 ---
 
-## 📖 Examples
+## Examples
 
-### Basic Examples
+Try these with `engcode run examples/<file>.eng`:
 
-- [`examples/hello-world.eng`](examples/hello-world.eng) - Simple output
-- [`examples/variables-test.eng`](examples/variables-test.eng) - Variable assignments
-- [`examples/crud-test.eng`](examples/crud-test.eng) - Database CRUD operations
-
-### Production Examples
-
-- [`examples/ecommerce-setup.eng`](examples/ecommerce-setup.eng) - E-commerce platform (16 collections)
-- [`examples/saas-platform.eng`](examples/saas-platform.eng) - SaaS application (20 collections)
-- [`examples/social-network.eng`](examples/social-network.eng) - Social media (22 collections)
-- [`examples/project-management.eng`](examples/project-management.eng) - Project management (21 collections)
-- [`examples/healthcare-system.eng`](examples/healthcare-system.eng) - Healthcare system (22 collections)
-
----
-
-## 🚀 Roadmap
-
-### ✅ Phase 1: Foundation (COMPLETE - 95%)
-
-- [x] Lexer with spell-checking
-- [x] Parser with AST generation
-- [x] Semantic analyzer
-- [x] Interpreter/VM
-- [x] Value types (number, string, boolean, array, object)
-- [x] Variables and assignments
-- [x] SQLite database integration
-- [x] CRUD operations (insert, select, update, delete)
-- [x] CLI with colored output
-- [x] 26 unit tests passing
-- [ ] Comprehensive error messages
-- [ ] Performance optimization
-- [ ] 100% test coverage
-
-### ⏳ Phase 2: Desktop IDE (Next)
-
-- [ ] Tauri 2.0 desktop application
-- [ ] Monaco Editor integration
-- [ ] File explorer sidebar
-- [ ] Integrated terminal
-- [ ] Live preview pane
-- [ ] Syntax highlighting
-- [ ] Auto-complete
-- [ ] DMG installer for macOS
-
-### ⏳ Phase 3: Language Expansion
-
-- [ ] Functions and procedures
-- [ ] Control flow (if/else, loops)
-- [ ] Error handling (try/catch)
-- [ ] Import system
-- [ ] MongoDB, PostgreSQL, MySQL support
-
-### ⏳ Phase 4: Web Capabilities
-
-- [ ] Axum web server
-- [ ] HTTP routing
-- [ ] API endpoints
-- [ ] WebSockets
-- [ ] HTML/CSS generation
+| Example | Shows |
+|---------|-------|
+| `crud-test.eng` | Database CRUD with selective output |
+| `method-calls.eng` | String/array methods and chaining |
+| `string-interpolation.eng` | `{variable}` interpolation |
+| `control-flow.eng` | if/else, loops, break/continue |
+| `functions.eng` | Functions with parameters and return |
+| `all-new-features.eng` | Objects, auth, WHERE clauses, and more |
+| `web-server.eng` | Web server with JSON routes |
+| `webapp.eng` | Server + database + data routes |
+| `healthcare-system.eng` | Larger database-backed application |
+| `homepage.eng` | HTML page generation and rendering |
 
 ---
 
-## 🤝 Contributing
+## Known Limitations
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+See [NOT_WORKING.md](NOT_WORKING.md) for the full, candid list. The headline
+items:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- External service integrations (Stripe, SendGrid, Twilio, S3, OAuth) are not implemented.
+- No JavaScript generation yet (HTML and CSS only).
+- No transactions, indexes, foreign keys, or migrations in the database layer.
+- No classes, async/await, or package/import system.
+- Mobile transpiles to React Native but does not build `.ipa`/`.apk` end-to-end.
+- The web server binds to localhost for development and demos.
 
 ---
 
-## 🙏 Acknowledgments
+## Contributing
 
-- Built with [Rust](https://www.rust-lang.org/)
-- Database powered by [SQLite](https://www.sqlite.org/)
-- Inspired by natural language processing and human-computer interaction research
+Contributions are welcome. To contribute:
 
----
-
-## 📞 Support
-
-- **Issues:** [GitHub Issues](https://github.com/yourusername/englishcode/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/englishcode/discussions)
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes: `git commit -am "Add your feature"`
+4. Push to the branch: `git push origin feature/your-feature`
+5. Open a pull request.
 
 ---
 
-**EnglishCode - Programming for Everyone** 🌟
+## Support
 
-*Version 0.1.0 - macOS Edition*
+- Report issues at [GitHub Issues](https://github.com/ikaydreams-dev/OpenSoftware/issues)
+- Start a discussion at [GitHub Discussions](https://github.com/ikaydreams-dev/OpenSoftware/discussions)
+- See the honest, verified status at [HONEST_STATUS.md](HONEST_STATUS.md)
+
+---
+
+EnglishCode is a Rust-powered, beginner-friendly programming language for
+building real applications in plain English.

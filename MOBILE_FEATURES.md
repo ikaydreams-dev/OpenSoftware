@@ -1,4 +1,4 @@
-# 📱 EnglishCode Mobile - iOS & Android Support
+# EnglishCode Mobile - iOS & Android Support
 
 ## Overview
 
@@ -7,6 +7,7 @@ EnglishCode now **compiles to native iOS and Android apps** using React Native. 
 ## Installation
 
 ```bash
+
 # Install React Native dependencies
 npm install -g react-native-cli
 
@@ -19,11 +20,13 @@ xcode-select --install
 export ANDROID_HOME=$HOME/Library/Android/sdk
 ```
 
+
 ## Quick Start
 
 ### 1. Create Your App in English
 
 ```englishcode
+
 create a page called "home" with title "My App"
 
 add heading "Welcome!"
@@ -34,17 +37,22 @@ add button labeled "Get Started"
 render page "home"
 ```
 
+
 ### 2. Initialize Mobile Project
 
 ```bash
+
 engcode mobile init MyApp --output ./mobile
 ```
+
 
 ### 3. Build from .eng File
 
 ```bash
+
 engcode mobile build app.eng --platform both
 ```
+
 
 This transpiles your English code to React Native (JavaScript/TypeScript).
 
@@ -52,17 +60,21 @@ This transpiles your English code to React Native (JavaScript/TypeScript).
 
 **iOS:**
 ```bash
+
 engcode mobile run-ios
 ```
 
+
 **Android:**
 ```bash
+
 engcode mobile run-android
 ```
 
+
 ## Features
 
-### ✅ Supported Components
+### Supported Components
 
 | English | React Native Component |
 |---------|----------------------|
@@ -72,7 +84,7 @@ engcode mobile run-android
 | `add input with type "email"` | `<TextInput />` |
 | `add image from "url"` | `<Image source={{uri: ...}} />` |
 
-### ✅ Styling
+### Styling
 
 All components get automatic mobile-optimized styles:
 - Responsive padding/margins
@@ -80,11 +92,12 @@ All components get automatic mobile-optimized styles:
 - Platform-specific fonts
 - Dark mode support (coming soon)
 
-### ✅ Layout
+### Layout
 
 EnglishCode uses `ScrollView` by default for mobile-friendly scrolling.
 
 ```englishcode
+
 create a page called "profile"
 add heading "Profile"
 add image from "avatar.png" with alt "Avatar"
@@ -92,7 +105,8 @@ add paragraph "User bio here"
 add button labeled "Edit Profile"
 ```
 
-### 🚧 Coming Soon
+
+### Coming Soon
 
 - [ ] Navigation between screens
 - [ ] Async data fetching
@@ -106,24 +120,28 @@ add button labeled "Edit Profile"
 ### iOS (.ipa for App Store)
 
 ```bash
+
 cd mobile/ios
 pod install
 xcodebuild -workspace MyApp.xcworkspace \
-  -scheme MyApp \
-  -configuration Release \
-  -archivePath build/MyApp.xcarchive \
-  archive
+ -scheme MyApp \
+ -configuration Release \
+ -archivePath build/MyApp.xcarchive \
+ archive
 ```
+
 
 Then export IPA using Xcode.
 
 ### Android (.apk/.aab for Google Play)
 
 ```bash
+
 cd mobile/android
-./gradlew assembleRelease  # APK
-./gradlew bundleRelease    # AAB (recommended)
+./gradlew assembleRelease # APK
+./gradlew bundleRelease # AAB (recommended)
 ```
+
 
 Output: `android/app/build/outputs/`
 
@@ -131,6 +149,7 @@ Output: `android/app/build/outputs/`
 
 **input.eng:**
 ```englishcode
+
 create a page called "login"
 
 add heading "Sign In"
@@ -144,32 +163,46 @@ add paragraph "Welcome back!"
 add button labeled "Logout"
 ```
 
+
 **Transpiles to React Native:**
 ```tsx
+
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 
 export default function App() {
-  return (
+ return (
     <ScrollView style={styles.container}>
+
       <Text style={{fontSize: 32, fontWeight: 'bold'}}>Sign In</Text>
+
       <TextInput placeholder="Email" style={{borderWidth: 1, padding: 12}} />
+
       <TextInput placeholder="Password" secureTextEntry={true} style={{borderWidth: 1, padding: 12}} />
+
       <TouchableOpacity style={{backgroundColor: '#007bff', padding: 15}}>
+
         <Text style={{color: 'white', textAlign: 'center'}}>Login</Text>
+
       </TouchableOpacity>
+
     </ScrollView>
-  );
+
+ );
 }
 
 const styles = StyleSheet.create({
-  container: {
+ container: {
     flex: 1,
+
     backgroundColor: '#fff',
+
     padding: 20,
-  },
+
+ },
 });
 ```
+
 
 ## CLI Commands
 
@@ -184,42 +217,55 @@ const styles = StyleSheet.create({
 ## Architecture
 
 ```
+
 ┌─────────────────┐
-│   .eng file     │  (English source code)
+│ .eng file │ (English source code)
 └────────┬────────┘
          │
+
          ▼
+
 ┌─────────────────┐
-│ Lexer → Parser  │  (Parse to AST)
+│ Lexer → Parser │ (Parse to AST)
 └────────┬────────┘
          │
+
          ▼
+
 ┌─────────────────┐
-│ MobileTranspiler│  (Transpile AST → React Native)
+│ MobileTranspiler│ (Transpile AST → React Native)
 └────────┬────────┘
          │
+
          ▼
+
 ┌─────────────────┐
-│   App.tsx       │  (React Native code)
+│ App.tsx │ (React Native code)
 └────────┬────────┘
          │
+
     ┌────┴─────┐
+
     ▼          ▼
+
 ┌────────┐ ┌────────┐
-│  iOS   │ │Android │
-│  .ipa  │ │  .apk  │
+│ iOS │ │Android │
+│ .ipa │ │ .apk │
 └────────┘ └────────┘
 ```
+
 
 ## GitHub Workflow
 
 Your `.eng` files stay in English on GitHub:
 
 ```bash
+
 git add app.eng
 git commit -m "Add mobile app"
 git push
 ```
+
 
 The transpiled React Native code is gitignored (in `mobile/` directory).
 

@@ -1,4 +1,4 @@
-# 💯 EnglishCode - HONEST Status Report
+# EnglishCode - HONEST Status Report
 **Date:** September 11, 2026
 **Reality Check:** What ACTUALLY works vs what's just keywords.
 
@@ -8,76 +8,80 @@
 
 ---
 
-## ✅ ACTUALLY WORKING (Tested & Verified)
+## ACTUALLY WORKING (Tested & Verified)
 
 ### 1. Core Language
-- ✅ Variables (`set/let/make/store/save`) & all base types (number, string, boolean, null, arrays, objects)
-- ✅ Arithmetic + comparisons (`greaterthan`, `lessthan`, `equalto`, `and`, `or`, `not`)
-- ✅ If/else + **else-if** chains, while, for, for-each, break/continue
-- ✅ Functions with parameters & return values
-- ✅ Try/catch/finally + `throw`
-- ✅ **Method calls & chaining**: `text.uppercase()`, `text.trim()`, `text.split(",")`, `text.replace(a,b)`, `text.lowercase()`
-- ✅ **Array methods**: `push`, `pop`, `length`, `contains`, `sort`, `reverse`, `first`, `last`
-- ✅ **Comments** `# ...` (full-line and inline)
-- ✅ **String interpolation** `"Hello {name}"`
-- ✅ **Object literals** `{name: "Alice", age: 25}` and access `person.name`
-- ✅ **Array indexing** `items[0]` and **negative numbers** `-5`
+- Variables (`set/let/make/store/save`) & all base types (number, string, boolean, null, arrays, objects)
+- Arithmetic + comparisons (`greaterthan`, `lessthan`, `equalto`, `and`, `or`, `not`)
+- If/else + **else-if** chains, while, for, for-each, break/continue
+- Functions with parameters & return values
+- Try/catch/finally + `throw`
+- **Method calls & chaining**: `text.uppercase()`, `text.trim()`, `text.split(",")`, `text.replace(a,b)`, `text.lowercase()`
+- **Array methods**: `push`, `pop`, `length`, `contains`, `sort`, `reverse`, `first`, `last`
+- **Comments** `# ...` (full-line and inline)
+- **String interpolation** `"Hello {name}"`
+- **Object literals** `{name: "Alice", age: 25}` and access `person.name`
+- **Array indexing** `items[0]` and **negative numbers** `-5`
 
 **Tested:** every one of the above runs in the `.eng` binary.
 
 ### 2. Database (SQLite)
-- ✅ Create database, create collections (tables)
-- ✅ Insert, select-all
-- ✅ **WHERE clauses on select/update/delete** (`where age greaterthan 18`)
-- ✅ Real row-level update/delete with result counts
-- ✅ **Idempotent runs** — `create collections in it` resets the collection, so re-running a script never duplicates rows
-- ✅ Multiple connections to the same DB file stay in sync (auth, web routes, and scripts all read the same committed data)
+- Create database, create collections (tables)
+- Insert, select-all
+- **WHERE clauses on select/update/delete** (`where age greaterthan 18`)
+- Real row-level update/delete with result counts
+- **Idempotent runs** — `create collections in it` resets the collection, so re-running a script never duplicates rows
+- Multiple connections to the same DB file stay in sync (auth, web routes, and scripts all read the same committed data)
 
 **Verified:**
 ```englishcode
+
 create a database called "mydb"
 create these collections in it
-  users
+ users
 insert into users with name "Alice" and age 25
 select all from users where age greaterthan 18
 delete from users where age lessthan 18
 ```
 
+
 ### 3. Authentication (from `.eng` files)
-- ✅ `signup "alice" with email "a@b.com" and password "pass"` — persists user to DB, hashes password
-- ✅ `login "alice" with password "pass"` — issues a session token
-- ✅ `logout` — invalidates the session
-- ✅ Survives restarts (stored in the database file)
+- `signup "alice" with email "a@b.com" and password "pass"` — persists user to DB, hashes password
+- `login "alice" with password "pass"` — issues a session token
+- `logout` — invalidates the session
+- Survives restarts (stored in the database file)
 
 ### 4. Web Development
-- ✅ HTML page generation with auto-CSS (heading, paragraph, button, input, image)
-- ✅ Render to `public/*.html`
-- ✅ Web server (Axum + Tokio)
-- ✅ Static routes `add route get "/api/x" returning "msg"` → JSON
-- ✅ **Data routes** `add route get "/api/users" returning rows from users` → live DB rows as JSON
-- ✅ **Server-side templating** — `{{users}}` in a page renders a live HTML table of that collection on every request
-- ✅ Graceful shutdown: Ctrl+C, or `start the server for N seconds` auto-exits cleanly
+- HTML page generation with auto-CSS (heading, paragraph, button, input, image)
+- Render to `public/*.html`
+- Web server (Axum + Tokio)
+- Static routes `add route get "/api/x" returning "msg"` → JSON
+- **Data routes** `add route get "/api/users" returning rows from users` → live DB rows as JSON
+- **Server-side templating** — `{{users}}` in a page renders a live HTML table of that collection on every request
+- Graceful shutdown: Ctrl+C, or `start the server for N seconds` auto-exits cleanly
 
 **Verified end-to-end** with curl:
 ```englishcode
+
 signup "sarah" with email "sarah@test.com" and password "secret123"
 add route get "/api/users" returning rows from users
 start the server for 4 seconds
 ```
+
 → `curl /api/users` returns `{"data":[{...sarah...}]}`, and a page with
 `{{users}}` returns a rendered `<table>`.
 
 ### 5. Mobile (iOS/Android)
-- ✅ React Native transpiler (English → JSX)
-- ✅ `engcode mobile init/build/run-ios/run-android`
-- ⚠️ Requires Node.js + RN CLI; builds `.ipa/.apk` manually
+- React Native transpiler (English → JSX)
+- `engcode mobile init/build/run-ios/run-android`
+- Requires Node.js + RN CLI; builds `.ipa/.apk` manually
 
 ### 6. Test Suite
-- ✅ **54 Rust tests passing** (covers lexer, parser, interpreter, database, auth, HTML builder)
+- **54 Rust tests passing** (covers lexer, parser, interpreter, database, auth, HTML builder)
 
 ---
 
-## ⏳ PARTIALLY WORKING
+## PARTIALLY WORKING
 
 - **Form submissions** — forms/inputs render as HTML, but `submit form to "..."` isn't wired up
 - **HTML statements** — `add element`, `add form`, `set style` parse but are no-ops in the interpreter
@@ -86,7 +90,7 @@ start the server for 4 seconds
 
 ---
 
-## ❌ NOT WORKING (Keywords Only, No Implementation)
+## NOT WORKING (Keywords Only, No Implementation)
 
 - **External services:** Stripe, SendGrid, Twilio, AWS S3, OAuth (all 0%)
 - **JWT** — session tokens work, but no JWT issue/verify
@@ -100,11 +104,11 @@ start the server for 4 seconds
 
 ---
 
-## 📊 REAL METRICS
+## REAL METRICS
 
 | Metric | Value |
 |--------|-------|
-| Rust tests passing | **54 / 54** ✅ |
+| Rust tests passing | **54 / 54** |
 | Core language features | ~100% of listed |
 
 ### What you can ACTUALLY build today
@@ -124,7 +128,7 @@ start the server for 4 seconds
 
 ---
 
-## 🔧 TO-DO (Next Priorities)
+## TO-DO (Next Priorities)
 
 ### Priority 1 — finish the gaps in what already runs
 1. Wire up `add element` / `add form` / `set style` (currently parse-only)
@@ -145,7 +149,7 @@ start the server for 4 seconds
 
 ---
 
-## 🎯 BOTTOM LINE
+## BOTTOM LINE
 
 **What's true:** EnglishCode can build real websites, live-data APIs, SQLite-backed
 apps with auth, and generate React Native code **today** — all verified by running
