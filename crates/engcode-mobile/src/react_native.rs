@@ -55,6 +55,9 @@ impl ReactNativeProject {
 
     pub fn write_app_code(&self, code: &str) -> Result<()> {
         let app_path = Path::new(&self.output_dir).join("App.tsx");
+        if let Some(parent) = app_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         fs::write(app_path, code)?;
         println!("✓ App code written to App.tsx");
         Ok(())
