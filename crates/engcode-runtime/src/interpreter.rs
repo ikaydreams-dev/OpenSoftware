@@ -135,6 +135,16 @@ impl Interpreter {
             Statement::Continue => {
                 Err(RuntimeError::ContinueOutsideLoop)
             }
+            Statement::NavigateTo { page } => {
+                self.execute_navigate(page)
+            }
+            Statement::GoBack => {
+                println!("  {} go back", "→".bright_black());
+                Ok(())
+            }
+            Statement::FetchData { url, variable } => {
+                self.execute_fetch_data(url, variable)
+            }
             // Function statements
             Statement::FunctionDef { name, parameters, body } => {
                 self.execute_function_def(name, parameters, body)
@@ -225,6 +235,24 @@ impl Interpreter {
             println!("  {} Created collection {}", "✓".green(), name.bright_white());
         }
 
+        Ok(())
+    }
+
+    fn execute_navigate(&mut self, page: Expression) -> Result<(), RuntimeError> {
+        let name = self.evaluate_expression(page)?;
+        println!("  {} Navigate to page {}", "→".cyan(), name);
+        self.context
+            .set_variable("__redirect__".to_string(), Value::String(name.to_string()));
+        Ok(())
+    }
+
+    fn execute_fetch_data(&mut self, url_expr: Expression, variable: String) -> Result<(), RuntimeError> {
+        let url = self.evaluate_expression(url_expr)?;
+        println!("  {} Fetching data from {}", "→".cyan(), url);
+        if !variable.is_empty() {
+            // Place the (literal) URL as a placeholder; web runtime has no fetch client.
+            self.context.set_variable(variable.clone(), Value::String(url.to_string()));
+        }
         Ok(())
     }
 

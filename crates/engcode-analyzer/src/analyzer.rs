@@ -56,6 +56,12 @@ impl SemanticAnalyzer {
             Statement::SetCookie { .. } => Ok(()),
             Statement::Insert { .. } => Ok(()),
             Statement::InsertRaw { .. } => Ok(()),
+            Statement::NavigateTo { .. } => Ok(()),
+            Statement::GoBack => Ok(()),
+            Statement::FetchData { variable, .. } => {
+                self.symbol_table.define(variable.clone(), SymbolType::Variable);
+                Ok(())
+            }
             Statement::Select { .. } => Ok(()),
             Statement::Update { .. } => Ok(()),
             Statement::Delete { .. } => Ok(()),

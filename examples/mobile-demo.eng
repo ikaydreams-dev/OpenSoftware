@@ -1,0 +1,21 @@
+create a page called "home" with title "Welcome"
+add heading "My App"
+add paragraph "A native app written in English."
+add input with type "email" and placeholder "Email address"
+add button labeled "Continue"
+navigate to page "profile"
+add link "Open website" from "https://example.com"
+
+create a page called "profile" with title "Profile"
+add heading "Profile"
+add paragraph "Your details"
+fetch data from "https://api.example.com/user" as profile
+add button labeled "Back"
+go back
+
+create a page called "settings" with title "Settings"
+set dark_mode to true
+add heading "Settings"
+fetch data from "https://api.example.com/settings" as preferences
+add button labeled "Go Home"
+navigate to page "home"

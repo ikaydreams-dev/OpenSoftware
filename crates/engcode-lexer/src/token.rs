@@ -175,6 +175,7 @@ pub enum Token {
     // UI Component Keywords
     Labeled,
     Placeholder,
+    Url,
     Src,
     Source,
     Alt,
@@ -455,6 +456,7 @@ impl Token {
             // UI Component Keywords
             "labeled" => Token::Labeled,
             "placeholder" => Token::Placeholder,
+            "url" => Token::Url,
             "src" => Token::Src,
             "source" => Token::Source,
             "alt" => Token::Alt,

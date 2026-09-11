@@ -153,6 +153,15 @@ pub enum Statement {
     },
     Break,
     Continue,
+    // Mobile navigation
+    NavigateTo {
+        page: Expression,
+    },
+    GoBack,
+    FetchData {
+        url: Expression,
+        variable: String,
+    },
     // Function Statements
     FunctionDef {
         name: String,

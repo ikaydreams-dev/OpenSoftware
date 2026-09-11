@@ -53,6 +53,7 @@ impl Parser {
                     Some(Token::Heading) => self.parse_add_heading(),
                     Some(Token::Paragraph) => self.parse_add_paragraph(),
                     Some(Token::Image) | Some(Token::Icon) => self.parse_add_image(),
+                    Some(Token::Link) => self.parse_add_link(),
                     Some(Token::Style) => self.parse_add_css(),
                     Some(Token::Identifier(name)) if name == "css" => self.parse_add_css(),
                     Some(Token::Upload) => self.parse_add_upload_route(),
@@ -89,6 +90,8 @@ impl Parser {
             Token::Try => self.parse_try_catch(),
             Token::Throw | Token::Raise => self.parse_throw(),
             Token::Identifier(name) if name == "validate" => self.parse_validate(),
+            Token::Identifier(name) if name == "navigate" => self.parse_navigate(),
+            Token::Identifier(name) if name == "go" => self.parse_go_back(),
             Token::Signup => self.parse_signup(),
             Token::Login => self.parse_login(),
             Token::Logout => self.parse_logout(),
@@ -1025,6 +1028,23 @@ impl Parser {
     }
 
     fn parse_select(&mut self) -> Result<Statement, String> {
+        // Detect `fetch data from "url"` / `fetch from "url"` (URL fetch) vs a
+        // database select. A URL-in-string is a strong signal; a collection name
+        // is an identifier, never a string.
+        if matches!(self.current_token(), Token::Fetch) {
+            let mut idx = self.position + 1;
+            if self.tokens.get(idx).map_or(false, |t| matches!(t, Token::Identifier(name) if name == "data")) {
+                idx += 1;
+            }
+            if matches!(self.tokens.get(idx), Some(Token::From)) {
+                if let Some(Token::String(s)) = self.tokens.get(idx + 1) {
+                    if s.starts_with("http") || s.starts_with('/') || s.contains("://") {
+                        return self.parse_fetch_data();
+                    }
+                }
+            }
+        }
+
         // select/get/find/fetch
         self.advance();
 
@@ -1251,32 +1271,82 @@ impl Parser {
         self.advance(); // consume "add"
         self.advance(); // consume "input"
 
-        // Get input type: of type "text" or just default to "text"
-        let input_type = if matches!(self.current_token(), Token::Of) {
+        // Get input type: "of type X", "with type X", or just default to "text"
+        let mut input_type = "text".to_string();
+        if matches!(self.current_token(), Token::Of) || matches!(self.current_token(), Token::With) {
             self.advance();
             if matches!(self.current_token(), Token::Type) {
                 self.advance();
-                match self.current_token() {
-                    Token::String(s) => {
-                        let t = s.clone();
-                        self.advance();
-                        t
-                    }
-                    _ => "text".to_string(),
+                if let Token::String(s) = self.current_token() {
+                    input_type = s.clone();
+                    self.advance();
                 }
-            } else {
-                "text".to_string()
             }
-        } else {
-            "text".to_string()
-        };
+        }
 
-        let properties = Vec::new(); // TODO: parse properties
+        let mut properties: Vec<(String, Expression)> = Vec::new();
+
+        // Optional: "and placeholder <string>" / "with placeholder <string>"
+        loop {
+            if matches!(self.current_token(), Token::And) || matches!(self.current_token(), Token::With) {
+                self.advance();
+            } else {
+                break;
+            }
+            if !matches!(self.current_token(), Token::Placeholder) {
+                break;
+            }
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                properties.push(("placeholder".to_string(), Expression::String(s.clone())));
+                self.advance();
+            } else {
+                break;
+            }
+        }
 
         Ok(Statement::AddInput {
             input_type,
             properties,
         })
+    }
+
+    fn parse_add_link(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        self.advance(); // consume "link"
+
+        // Skip optional: labeled
+        if matches!(self.current_token(), Token::Labeled) {
+            self.advance();
+        }
+
+        let text = match self.current_token() {
+            Token::String(s) => s.clone(),
+            Token::Identifier(s) => s.clone(),
+            _ => return Err("Expected link text".to_string()),
+        };
+        self.advance();
+
+        // Optional: "from 'url'" / "to 'url'" / "with url '...'"
+        let mut url = String::new();
+        if matches!(self.current_token(), Token::From | Token::To) {
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                url = s.clone();
+                self.advance();
+            }
+        } else if matches!(self.current_token(), Token::With) {
+            self.advance();
+            if matches!(self.current_token(), Token::Url) {
+                self.advance();
+                if let Token::String(s) = self.current_token() {
+                    url = s.clone();
+                    self.advance();
+                }
+            }
+        }
+
+        Ok(Statement::AddLink { text, url })
     }
 
     fn parse_add_heading(&mut self) -> Result<Statement, String> {
@@ -2013,6 +2083,75 @@ impl Parser {
         let message = self.parse_expression()?;
 
         Ok(Statement::Throw { message })
+    }
+
+    fn parse_navigate(&mut self) -> Result<Statement, String> {
+        // navigate to page "name"
+        // navigate to "name"
+        self.advance(); // consume "navigate"
+
+        // Skip optional: to
+        if matches!(self.current_token(), Token::To) {
+            self.advance();
+        }
+        // Skip optional: page/screen
+        if matches!(self.current_token(), Token::Page)
+            || matches!(&self.current_token(), Token::Identifier(name) if name == "screen") {
+            self.advance();
+        }
+
+        let page = self.parse_expression()?;
+
+        Ok(Statement::NavigateTo { page })
+    }
+
+    fn parse_go_back(&mut self) -> Result<Statement, String> {
+        // go back
+        self.advance(); // consume "go"
+        if matches!(self.current_token(), Token::Identifier(name) if name == "back") {
+            self.advance();
+        }
+        Ok(Statement::GoBack)
+    }
+
+    fn parse_fetch_data(&mut self) -> Result<Statement, String> {
+        // fetch data from "url"
+        // fetch from "url"
+        self.advance(); // consume "fetch"
+
+        // Skip optional: data/content
+        if matches!(&self.current_token(), Token::Identifier(name) if name == "data")
+            || matches!(self.current_token(), Token::Content) {
+            self.advance();
+        }
+
+        // Expect from
+        if !matches!(self.current_token(), Token::From) {
+            return Err("Expected 'from' in fetch statement".to_string());
+        }
+        self.advance();
+
+        let url = self.parse_expression()?;
+
+        // Optional: store/save into variable  =>  fetch data from "u" into items
+        let mut variable = String::new();
+        if matches!(self.current_token(), Token::Into | Token::To | Token::In) {
+            self.advance();
+            if let Some(name) = self.token_as_identifier(self.current_token()) {
+                variable = name;
+                self.advance();
+            }
+        }
+        // Optional: fetch data from "u" as items
+        if variable.is_empty() && matches!(&self.current_token(), Token::Identifier(name) if name == "as") {
+            self.advance();
+            if let Some(name) = self.token_as_identifier(self.current_token()) {
+                variable = name;
+                self.advance();
+            }
+        }
+
+        Ok(Statement::FetchData { url, variable })
     }
 
     fn parse_validate(&mut self) -> Result<Statement, String> {

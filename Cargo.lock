@@ -254,6 +254,7 @@ dependencies = [
 name = "engcode-mobile"
 version = "0.1.0"
 dependencies = [
+ "engcode-lexer",
  "engcode-parser",
  "serde",
  "serde_json",

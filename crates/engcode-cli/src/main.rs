@@ -189,6 +189,15 @@ fn handle_mobile_command(action: MobileCommands) -> Result<(), String> {
             // Write transpiled code
             project.write_app_code(&react_code).map_err(|e| e.to_string())?;
 
+            // Install React Navigation dependencies so the app actually runs
+            println!("{}", "  → Installing navigation dependencies...".bright_black());
+            project.add_dependencies(&[
+                "@react-navigation/native",
+                "@react-navigation/native-stack",
+                "react-native-screens",
+                "react-native-safe-area-context",
+            ]).map_err(|e| e.to_string())?;
+
             println!("{}", format!("✓ Mobile app built in {}", output).green().bold());
 
             if platform == "ios" || platform == "both" {
