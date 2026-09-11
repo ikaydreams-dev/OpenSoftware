@@ -1,0 +1,13 @@
+create database called "webapp3"
+create collections called "users" "files" in it
+
+insert into users with name is "sarah" and role is "admin" and age is 30
+
+create a web server on port 4003
+add middleware logging
+handle post "/api/users" with body as data
+  validate request with "name" required and "email" as email and "age" as number and "bio" with max 200
+  insert data into users
+  show "user created"
+end
+start the server for 8 seconds

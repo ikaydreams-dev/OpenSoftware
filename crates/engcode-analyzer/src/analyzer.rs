@@ -143,6 +143,7 @@ impl SemanticAnalyzer {
                 Ok(())
             }
             Statement::Throw { .. } => Ok(()),
+            Statement::Validate { .. } => Ok(()),
             // Authentication statements
             Statement::Signup { .. } => Ok(()),
             Statement::Login { .. } => Ok(()),

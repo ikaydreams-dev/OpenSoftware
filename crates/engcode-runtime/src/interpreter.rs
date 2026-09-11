@@ -1,5 +1,6 @@
 use colored::*;
 use engcode_parser::{Program, Statement, Expression};
+use engcode_parser::ast::ValidationRule;
 use crate::context::ExecutionContext;
 use crate::error::RuntimeError;
 use crate::value::{Value, value_from_json, value_to_json};
@@ -158,6 +159,9 @@ impl Interpreter {
                     _ => format!("{}", msg),
                 };
                 Err(RuntimeError::UserError(error_msg))
+            }
+            Statement::Validate { rules } => {
+                self.execute_validate(rules)
             }
             Statement::Signup { username, email, password } => {
                 self.execute_signup(username, email, password)
@@ -740,6 +744,7 @@ impl Interpreter {
                     if !body_var.is_empty() {
                         ctx.set_variable(body_var.clone(), value_from_json(&b));
                     }
+                    ctx.set_variable("__request_body__".to_string(), value_from_json(&b));
                 }
 
                 let mut interp = Interpreter { context: ctx };
@@ -751,6 +756,16 @@ impl Interpreter {
                                 .map_err(|e| e.to_string())?;
                             println!("{}", v);
                             response = value_to_json(&v);
+                        }
+                        Statement::Validate { rules } => {
+                            match interp.execute_validate(rules.clone()) {
+                                Ok(()) => {}
+                                Err(RuntimeError::ValidationFailed(messages)) => {
+                                    response = serde_json::json!({ "error": messages, "status": 422 });
+                                    return Ok((response, 422));
+                                }
+                                Err(e) => return Err(e.to_string()),
+                            }
                         }
                         other => {
                             interp.execute_statement(other.clone())
@@ -1492,6 +1507,61 @@ impl Interpreter {
         Ok(())
     }
 
+    fn execute_validate(&mut self, rules: Vec<ValidationRule>) -> Result<(), RuntimeError> {
+        // The handler stores the parsed request body in __request_body__
+        let body = self
+            .context
+            .get_variable("__request_body__")
+            .cloned()
+            .unwrap_or(Value::Object(std::collections::HashMap::new()));
+
+        let mut errors: Vec<String> = Vec::new();
+
+        for rule in rules {
+            match rule {
+                ValidationRule::Required(field) => {
+                    let present = field_value(&body, &field);
+                    let ok = match present {
+                        Some(Value::Null) => false,
+                        None => false,
+                        Some(Value::String(s)) => !s.trim().is_empty(),
+                        Some(_) => true,
+                    };
+                    if !ok {
+                        errors.push(format!("Field '{}' is required", field));
+                    }
+                }
+                ValidationRule::Type { field, expected } => {
+                    if let Some(v) = field_value(&body, &field) {
+                        if let Some(msg) = validate_type(&field, v, &expected) {
+                            errors.push(msg);
+                        }
+                    }
+                }
+                ValidationRule::Min { field, value } => {
+                    if let Some(v) = field_value(&body, &field) {
+                        if let Some(msg) = validate_min(&field, v, value) {
+                            errors.push(msg);
+                        }
+                    }
+                }
+                ValidationRule::Max { field, value } => {
+                    if let Some(v) = field_value(&body, &field) {
+                        if let Some(msg) = validate_max(&field, v, value) {
+                            errors.push(msg);
+                        }
+                    }
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(RuntimeError::ValidationFailed(errors))
+        }
+    }
+
     fn execute_signup(&mut self, username: String, email: String, password: String) -> Result<(), RuntimeError> {
         // Get or create the auth system bound to the current database
         self.ensure_auth_system()?;
@@ -1763,6 +1833,69 @@ fn extract_body_content(html: &str) -> String {
     let start = html.find("<body>").map(|i| i + 6).unwrap_or(0);
     let end = html.find("</body>").unwrap_or(html.len());
     html[start..end].to_string()
+}
+
+// Returns the value of a field inside a request body object.
+fn field_value<'a>(body: &'a Value, field: &str) -> Option<&'a Value> {
+    match body {
+        Value::Object(map) => map.get(field),
+        Value::Array(items) => items.first().and_then(|i| match i {
+            Value::Object(map) => map.get(field),
+            _ => None,
+        }),
+        _ => None,
+    }
+}
+
+fn validate_type(field: &str, v: &Value, expected: &str) -> Option<String> {
+    let ok = match expected.to_lowercase().as_str() {
+        "string" | "text" => matches!(v, Value::String(_)),
+        "number" | "numeric" | "int" | "integer" => matches!(v, Value::Number(_)),
+        "boolean" | "bool" => matches!(v, Value::Boolean(_)),
+        "email" => match v {
+            Value::String(s) => {
+                s.contains('@') && s.contains('.') && s.len() >= 5
+            }
+            _ => false,
+        },
+        "array" | "list" => matches!(v, Value::Array(_)),
+        "object" => matches!(v, Value::Object(_)),
+        "anything" | "any" => true,
+        _ => true, // unknown type: ignore
+    };
+    if ok {
+        None
+    } else {
+        Some(format!("Field '{}' must be a {}, got {}", field, expected, v.type_name()))
+    }
+}
+
+fn validate_min(field: &str, v: &Value, min: f64) -> Option<String> {
+    let ok = match v {
+        Value::Number(n) => *n >= min,
+        Value::String(s) => s.len() as f64 >= min,
+        Value::Array(a) => a.len() as f64 >= min,
+        _ => true,
+    };
+    if ok {
+        None
+    } else {
+        Some(format!("Field '{}' must be at least {}", field, min))
+    }
+}
+
+fn validate_max(field: &str, v: &Value, max: f64) -> Option<String> {
+    let ok = match v {
+        Value::Number(n) => *n <= max,
+        Value::String(s) => s.len() as f64 <= max,
+        Value::Array(a) => a.len() as f64 <= max,
+        _ => true,
+    };
+    if ok {
+        None
+    } else {
+        Some(format!("Field '{}' must be at most {}", field, max))
+    }
 }
 
 #[cfg(test)]

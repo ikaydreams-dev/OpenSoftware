@@ -86,6 +86,7 @@ impl Parser {
             Token::Return => self.parse_return(),
             Token::Try => self.parse_try_catch(),
             Token::Throw | Token::Raise => self.parse_throw(),
+            Token::Identifier(name) if name == "validate" => self.parse_validate(),
             Token::Signup => self.parse_signup(),
             Token::Login => self.parse_login(),
             Token::Logout => self.parse_logout(),
@@ -1953,6 +1954,106 @@ impl Parser {
         let message = self.parse_expression()?;
 
         Ok(Statement::Throw { message })
+    }
+
+    fn parse_validate(&mut self) -> Result<Statement, String> {
+        use crate::ast::ValidationRule;
+
+        self.advance(); // consume 'validate'
+
+        // Skip optional: request / the / with / body
+        while self.current_token() == &Token::Request
+            || self.current_token() == &Token::Body
+            || self.current_token() == &Token::With
+            || self.current_token() == &Token::The
+            || matches!(self.current_token(), Token::Identifier(name) if name == "request")
+        {
+            self.advance();
+        }
+
+        let mut rules = Vec::new();
+
+        while !matches!(self.current_token(), Token::Newline | Token::EOF | Token::End) {
+            // Get field name
+            let field = match self.current_token() {
+                Token::String(s) => s.clone(),
+                Token::Identifier(s) => s.clone(),
+                Token::Item | Token::Value | Token::Type => {
+                    self.token_as_identifier(self.current_token()).unwrap_or_default()
+                }
+                _ => break,
+            };
+            self.advance();
+
+            // Skip optional "is" / "be" / "with" / article
+            if matches!(
+                self.current_token(),
+                Token::Is | Token::Be | Token::With | Token::A | Token::An | Token::The
+            ) {
+                self.advance();
+                if matches!(self.current_token(), Token::A | Token::An | Token::The) {
+                    self.advance();
+                }
+            }
+
+            // Determine rule
+            match self.current_token() {
+                Token::Required => {
+                    self.advance();
+                    rules.push(ValidationRule::Required(field));
+                }
+                Token::Identifier(name) if name == "as" => {
+                    self.advance();
+                    let expected = match self.current_token() {
+                        Token::Identifier(s) => s.clone(),
+                        Token::String(s) => s.clone(),
+                        Token::Email => "email".to_string(),
+                        Token::Text => "string".to_string(),
+                        _ => return Err("Expected a type after 'as' (string, number, email, boolean)".to_string()),
+                    };
+                    self.advance();
+                    rules.push(ValidationRule::Type { field, expected });
+                }
+                Token::Identifier(name) if name == "min" || name == "minimum" => {
+                    self.advance();
+                    while matches!(
+                        self.current_token(),
+                        Token::Value | Token::Length | Token::Of | Token::A
+                    ) {
+                        self.advance();
+                    }
+                    let value = match self.current_token() {
+                        Token::Number(n) => *n,
+                        _ => return Err("Expected number after 'min'".to_string()),
+                    };
+                    self.advance();
+                    rules.push(ValidationRule::Min { field, value });
+                }
+                Token::Identifier(name) if name == "max" || name == "maximum" => {
+                    self.advance();
+                    while matches!(
+                        self.current_token(),
+                        Token::Value | Token::Length | Token::Of | Token::A
+                    ) {
+                        self.advance();
+                    }
+                    let value = match self.current_token() {
+                        Token::Number(n) => *n,
+                        _ => return Err("Expected number after 'max'".to_string()),
+                    };
+                    self.advance();
+                    rules.push(ValidationRule::Max { field, value });
+                }
+                _ => break,
+            }
+
+            // Skip "and" or comma
+            if matches!(self.current_token(), Token::And | Token::Comma) {
+                self.advance();
+            }
+        }
+
+        Ok(Statement::Validate { rules })
     }
 
     fn parse_signup(&mut self) -> Result<Statement, String> {

@@ -34,6 +34,9 @@ pub enum RuntimeError {
 
     #[error("Assertion failed: {0}")]
     AssertionFailed(String),
+
+    #[error("Validation failed: {0:?}")]
+    ValidationFailed(Vec<String>),
 }
 
 impl From<engcode_stdlib::database::DatabaseError> for RuntimeError {

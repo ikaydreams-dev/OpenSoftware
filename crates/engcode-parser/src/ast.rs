@@ -170,6 +170,10 @@ pub enum Statement {
     Throw {
         message: Expression,
     },
+    // Request validation
+    Validate {
+        rules: Vec<ValidationRule>,
+    },
     // Authentication
     Signup {
         username: String,
@@ -263,6 +267,14 @@ pub enum BinaryOperator {
 pub enum UnaryOperator {
     Not,
     Negative,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValidationRule {
+    Required(String),
+    Type { field: String, expected: String },
+    Min { field: String, value: f64 },
+    Max { field: String, value: f64 },
 }
 
 #[derive(Debug)]
