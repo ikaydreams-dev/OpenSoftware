@@ -1,0 +1,8 @@
+[package]
+name = "engcode-parser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+engcode-lexer = { path = "../engcode-lexer" }
+thiserror.workspace = true

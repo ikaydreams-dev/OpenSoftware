@@ -1,0 +1,32 @@
+set appname to "EnglishCode"
+set version to "1.0.0"
+
+show "Starting EnglishCode Demo..."
+show appname
+show version
+
+set score to 95
+if score greaterthan 90 then
+  show "Excellent!"
+end
+
+for i from 1 to 5
+  show i
+end
+
+set items to ["Web", "Mobile", "Desktop"]
+for each platform in items
+  show platform
+end
+
+create a page called "demo" with title "EnglishCode Works!"
+add heading "Hello from EnglishCode!"
+add paragraph "This page was created in plain English"
+add button labeled "Amazing!"
+render page "demo"
+
+create a web server on port 8080
+start the server
+
+show "Demo complete!"
+show "Visit: http://localhost:8080/demo.html"

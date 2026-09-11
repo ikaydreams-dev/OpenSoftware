@@ -1,0 +1,9 @@
+create a web server on port 3000
+
+add route get "/api/users" returning "User List"
+add route post "/api/users" returning "User Created"
+add route get "/api/posts" returning "Post List"
+
+show "Web server configured! Starting..."
+
+start the server

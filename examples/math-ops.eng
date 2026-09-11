@@ -1,0 +1,66 @@
+# Math Operations Demo
+
+# Basic arithmetic
+set x to 10
+set y to 3
+
+set sum to x + y
+set diff to x - y
+set product to x * y
+set quotient to x / y
+
+show "x and y:"
+show x
+show y
+show "Sum:" show sum
+show "Difference:" show diff
+show "Product:" show product
+show "Quotient:" show quotient
+
+# Order of operations (PEMDAS)
+set result1 to 2 + 3 * 4
+show "2 + 3 * 4 =" show result1
+
+set result2 to 10 - 2 / 2
+show "10 - 2 / 2 =" show result2
+
+# Complex expressions
+set a to 5
+set b to 10
+set c to 2
+
+set formula to a * b + c
+show "Formula result:" show formula
+
+set formula2 to a + b * c
+show "Formula2 result:" show formula2
+
+# Testing math operations
+test "Math operations work"
+  set num1 to 20
+  set num2 to 5
+
+  set added to num1 + num2
+  assert added equalto 25
+
+  set subtracted to num1 - num2
+  assert subtracted equalto 15
+
+  set multiplied to num1 * num2
+  assert multiplied equalto 100
+
+  set quotientResult to num1 / num2
+  assert quotientResult equalto 4
+end
+
+# Negative numbers in arithmetic
+set pos to 10
+set neg to -5
+
+set addResult to pos + neg
+show "10 + -5 =" show addResult
+
+set subResult to pos - neg
+show "10 - -5 =" show subResult
+
+show "=== Math Operations Complete! ==="

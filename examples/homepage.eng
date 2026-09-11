@@ -1,0 +1,16 @@
+create a page called "home" with title "Welcome to EnglishCode"
+
+add heading "Welcome to Our Website"
+add paragraph "This is a demo page built entirely in English!"
+
+add button labeled "Click Me"
+add button labeled "Learn More"
+
+add paragraph "Enter your information below:"
+add input of type "text"
+add input of type "email"
+add button labeled "Submit"
+
+show "Page structure complete! Rendering..."
+
+render page "home"

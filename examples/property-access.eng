@@ -1,0 +1,58 @@
+# Property Access Demo
+
+# Basic property access
+set person to {name: "Alice", age: 25, city: "NYC"}
+set userName to person.name
+set userAge to person.age
+set userCity to person.city
+
+show "Name:" show userName
+show "Age:" show userAge
+show "City:" show userCity
+
+# Simple object
+set config to {host: "localhost", port: 8080}
+set configHost to config.host
+set configPort to config.port
+
+show "Host:" show configHost
+show "Port:" show configPort
+
+# Property access with interpolation
+set product to {title: "Laptop", price: 999, stock: 5}
+set productName to product.title
+set productPrice to product.price
+set description to "Product: {productName}, Price: ${productPrice}"
+show description
+
+# Property access in conditions
+set user to {username: "Bob", role: "admin", active: true}
+set isActive to user.active
+
+if isActive equalto true then
+  show "User is active"
+end
+
+# Testing property access
+test "Property access works"
+  set item to {id: 123, label: "Test", count: 10}
+  set itemId to item.id
+  set itemLabel to item.label
+  set itemCount to item.count
+
+  assert itemId equalto 123
+  assert itemLabel equalto "Test"
+  assert itemCount equalto 10
+end
+
+# Multiple property accesses
+set employee to {fullname: "Charlie", dept: "Engineering", pay: 75000}
+set empName to employee.fullname
+set empDept to employee.dept
+set empPay to employee.pay
+
+show "Employee: {empName}"
+show "Department: {empDept}"
+show "Pay: {empPay}"
+
+show "=== Property Access Complete! ==="

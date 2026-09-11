@@ -1,0 +1,77 @@
+# String Methods Demo
+
+# Basic string
+set text to "Hello World from EnglishCode"
+
+# Substring
+set sub1 to text.substring(0, 5)
+show "Substring(0, 5):" show sub1
+
+set sub2 to text.substring(6, 11)
+show "Substring(6, 11):" show sub2
+
+# IndexOf - find position of substring
+set pos1 to text.indexof("World")
+show "IndexOf 'World':" show pos1
+
+set pos2 to text.indexof("xyz")
+show "IndexOf 'xyz':" show pos2
+
+# StartsWith and EndsWith
+set url to "https://example.com"
+
+set isHttps to url.startswith("https")
+show "Starts with https:" show isHttps
+
+set isCom to url.endswith(".com")
+show "Ends with .com:" show isCom
+
+# CharAt - get character at index
+set message to "Hello"
+set char0 to message.charat(0)
+set char1 to message.charat(1)
+
+show "First char:" show char0
+show "Second char:" show char1
+
+# Concat - combine strings
+set first to "Hello"
+set combined to first.concat(" World")
+show "Concatenated:" show combined
+
+# Testing string methods
+test "String methods work"
+  set str to "JavaScript"
+
+  set sub to str.substring(0, 4)
+  assert sub equalto "Java"
+
+  set idx to str.indexof("Script")
+  assert idx equalto 4
+
+  set starts to str.startswith("Java")
+  assert starts equalto true
+
+  set ends to str.endswith("Script")
+  assert ends equalto true
+end
+
+# Email validation example
+set email to "user@example.com"
+
+set hasAt to email.indexof("@")
+show "Email has @ at position:" show hasAt
+
+set isDotCom to email.endswith(".com")
+show "Is .com email:" show isDotCom
+
+# File extension check
+set filename to "document.pdf"
+
+set isPdf to filename.endswith(".pdf")
+set isTxt to filename.endswith(".txt")
+
+show "Is PDF:" show isPdf
+show "Is TXT:" show isTxt
+
+show "=== String Methods Complete! ==="

@@ -1,0 +1,22 @@
+create a page called "home" with title "My Web App"
+
+add heading "Welcome to My Web App"
+add paragraph "This website was built entirely in plain English!"
+
+add button labeled "Get Started"
+add button labeled "Learn More"
+
+add paragraph "Sign up for our newsletter:"
+add input of type "email"
+add button labeled "Subscribe"
+
+show "Rendering home page..."
+render page "home"
+
+show "Starting web server..."
+create a web server on port 3000
+
+add route get "/api/hello" returning "Hello from API!"
+
+show "Server ready! Visit: http://localhost:3000/"
+start the server

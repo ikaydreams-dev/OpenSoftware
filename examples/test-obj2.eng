@@ -1,0 +1,5 @@
+set employee to {
+  name: "Charlie",
+  department: "Engineering"
+}
+show employee

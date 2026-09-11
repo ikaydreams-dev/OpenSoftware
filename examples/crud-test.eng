@@ -1,0 +1,13 @@
+create a database called "UserDB"
+
+create these collections in it
+  users
+  posts
+
+insert into users with name "Alice" and age 30 and active true
+
+insert into users with name "Bob" and age 25 and active true
+
+select all from users
+
+show "CRUD operations complete!"

@@ -1,0 +1,17 @@
+show "Testing functions..."
+
+define function greet that takes name
+  show "Hello"
+  show name
+end
+
+call greet with "Alice"
+call greet with "Bob"
+
+define function calculate that takes x and y
+  return 100
+end
+
+call calculate with 5 and 10
+
+show "All function tests completed!"

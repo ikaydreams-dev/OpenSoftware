@@ -1,0 +1,41 @@
+# String Interpolation Demo
+
+# Basic variable interpolation
+set name to "Alice"
+set greeting to "Hello, {name}!"
+show greeting
+
+# Multiple variables in one string
+set first to "John"
+set last to "Doe"
+set full to "Full name: {first} {last}"
+show full
+
+# Numbers in interpolation
+set age to 25
+set city to "New York"
+set bio to "{name} is {age} years old and lives in {city}"
+show bio
+
+# Interpolation with expressions
+set x to 10
+set y to 5
+set message to "x = {x}, y = {y}"
+show message
+
+# Testing with assertions
+test "String interpolation works"
+  set user to "Bob"
+  set welcome to "Welcome, {user}!"
+
+  assert welcome equalto "Welcome, Bob!"
+end
+
+# Complex example
+set product to "laptop"
+set price to 999
+set stock to 5
+set description to "Product: {product}, Price: ${price}, Stock: {stock} units"
+show description
+
+show "=== String Interpolation Complete! ==="

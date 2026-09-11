@@ -1,0 +1,60 @@
+# Array Methods Demo
+
+# Join - combine array elements into string
+set words to ["Hello", "World", "from", "EnglishCode"]
+set sentence to words.join(" ")
+show "Joined:" show sentence
+
+# First and Last
+set numbers to [10, 20, 30, 40, 50]
+set firstNum to numbers.first()
+set lastNum to numbers.last()
+show "First:" show firstNum
+show "Last:" show lastNum
+
+# Reverse array
+set items to [1, 2, 3, 4, 5]
+show "Original:" show items
+set reversed to items.reverse()
+show "Reversed:" show reversed
+
+# Sort array
+set unsorted to [5, 2, 8, 1, 9, 3]
+show "Unsorted:" show unsorted
+set sorted to unsorted.sort()
+show "Sorted:" show sorted
+
+# Sort strings
+set names to ["Charlie", "Alice", "Bob", "Diana"]
+show "Original names:" show names
+set sortedNames to names.sort()
+show "Sorted names:" show sortedNames
+
+# Length method
+set colors to ["red", "green", "blue"]
+set count to colors.length()
+show "Array has {count} items"
+
+# Testing array methods
+test "Array methods work"
+  set data to [3, 1, 4, 1, 5]
+
+  set firstItem to data.first()
+  assert firstItem equalto 3
+
+  set lastItem to data.last()
+  assert lastItem equalto 5
+
+  set len to data.length()
+  assert len equalto 5
+end
+
+# Join with different separators
+set tags to ["javascript", "rust", "python"]
+set commaSep to tags.join(", ")
+set dashSep to tags.join(" - ")
+
+show "Comma separated:" show commaSep
+show "Dash separated:" show dashSep
+
+show "=== Array Methods Complete! ==="

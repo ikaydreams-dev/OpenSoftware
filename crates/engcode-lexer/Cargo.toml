@@ -1,0 +1,9 @@
+[package]
+name = "engcode-lexer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]

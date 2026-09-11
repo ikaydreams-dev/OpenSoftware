@@ -1,0 +1,65 @@
+# EnglishCode Testing Framework Demo
+# Shows how to write tests with assert statements
+
+# Test basic math
+test "Basic arithmetic"
+  set x to 5
+  set y to 3
+  set sum to 8
+
+  assert x greaterthan 0
+  assert y lessthan 10
+  assert sum equalto 8
+end
+
+# Test string operations
+test "String methods"
+  set text to "hello"
+  set upper to text.uppercase()
+
+  assert upper equalto "HELLO"
+
+  set trimmed to "  test  ".trim()
+  assert trimmed equalto "test"
+end
+
+# Test array operations
+test "Array operations"
+  set items to [1, 2, 3, 4]
+
+  set first to items[0]
+  assert first equalto 1
+
+  set last to items[3]
+  assert last equalto 4
+end
+
+# Test conditionals
+test "Conditional logic"
+  set age to 25
+  set isAdult to false
+
+  if age greaterthan 18 then
+    set isAdult to true
+  end
+
+  assert isAdult equalto true
+end
+
+# Test objects
+test "Object literals"
+  set person to {name: "Bob", age: 30}
+  show "Testing object creation"
+  assert person equalto person
+end
+
+# Test negative numbers
+test "Negative numbers"
+  set temp to -10
+  assert temp lessthan 0
+
+  set balance to -50
+  assert balance lessthan 0
+end
+
+show "=== ALL TESTS COMPLETE ==="

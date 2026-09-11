@@ -1,0 +1,25 @@
+create a database called "SocialNetwork"
+
+create these collections in it
+  users
+  profiles
+  posts
+  comments
+  likes
+  shares
+  followers
+  following
+  friendships
+  messages
+  conversations
+  groups
+  group_members
+  events
+  event_attendees
+  notifications
+  stories
+  hashtags
+  mentions
+  media
+  reports
+  blocks

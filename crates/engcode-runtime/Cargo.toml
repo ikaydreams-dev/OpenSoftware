@@ -1,0 +1,11 @@
+[package]
+name = "engcode-runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+engcode-parser = { path = "../engcode-parser" }
+engcode-stdlib = { path = "../engcode-stdlib" }
+thiserror.workspace = true
+colored.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,34 @@
+show "Testing if/else statements..."
+
+set x to 10
+
+if x greaterthan 5 then
+  show "x is greater than 5"
+otherwise
+  show "x is 5 or less"
+end
+
+show "Testing for loops..."
+
+for i from 1 to 5
+  show i
+end
+
+show "Testing while loops..."
+
+set counter to 1
+
+while counter lessthanorequal 3 do
+  show counter
+  set counter to 4
+end
+
+show "Testing for each loop..."
+
+set names to ["Alice", "Bob", "Charlie"]
+
+for each name in names
+  show name
+end
+
+show "All control flow tests completed!"

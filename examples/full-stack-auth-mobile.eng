@@ -1,0 +1,27 @@
+create a database called "myapp"
+create collections called "users" and "sessions" in it
+
+set app_name to "EnglishCode FullStack"
+set version to "1.0.0"
+
+create a page called "login" with title "Login - EnglishCode"
+
+add heading "Welcome Back!"
+add paragraph "Sign in to continue"
+
+add input with type "email" and placeholder "Email address"
+add input with type "password" and placeholder "Password"
+
+add button labeled "Sign In"
+add button labeled "Create Account"
+
+render page "login"
+
+create a web server on port 3000
+add route "/api/login" that returns "Login API"
+add route "/api/signup" that returns "Signup API"
+start the server
+
+show "Full-stack app with auth ready!"
+show "Web: http://localhost:3000"
+show "Mobile: Run 'engcode mobile build full-stack-auth-mobile.eng'"

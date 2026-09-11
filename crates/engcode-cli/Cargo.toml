@@ -1,0 +1,17 @@
+[package]
+name = "engcode-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "engcode"
+path = "src/main.rs"
+
+[dependencies]
+engcode-lexer = { path = "../engcode-lexer" }
+engcode-parser = { path = "../engcode-parser" }
+engcode-analyzer = { path = "../engcode-analyzer" }
+engcode-runtime = { path = "../engcode-runtime" }
+engcode-mobile = { path = "../engcode-mobile" }
+clap.workspace = true
+colored.workspace = true

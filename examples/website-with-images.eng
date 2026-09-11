@@ -1,0 +1,17 @@
+create a page called "portfolio" with title "My Portfolio"
+
+add heading "Welcome to My Portfolio"
+add paragraph "Check out my work below"
+
+add image from "assets/logo.png" with alt "Company Logo"
+add image from "assets/profile.jpg" with alt "Profile Picture"
+
+add heading "Gallery"
+add image from "images/project1.png" with alt "Project 1 Screenshot"
+add image from "images/project2.png" with alt "Project 2 Screenshot"
+add image from "images/project3.png" with alt "Project 3 Screenshot"
+
+add button labeled "Contact Me"
+
+show "Portfolio page created with images!"
+render page "portfolio"

@@ -1,0 +1,74 @@
+# EnglishCode Testing Framework - Complete Demo
+
+show "=== EnglishCode Testing Framework ==="
+show ""
+
+# Test 1: Passing assertions
+test "Math operations work correctly"
+  set x to 10
+  set y to 5
+
+  assert x greaterthan y
+  assert y lessthan x
+  assert x greaterthan 0
+end
+
+# Test 2: String manipulation
+test "String methods transform text"
+  set greeting to "hello world"
+  set upper to greeting.uppercase()
+  set trimmed to "  spaced  ".trim()
+
+  assert upper equalto "HELLO WORLD"
+  assert trimmed equalto "spaced"
+end
+
+# Test 3: Database operations
+test "Database queries filter correctly"
+  create a database called "testdb"
+  create these collections in it
+    users
+
+  insert into users with name "Alice" and age 25
+  insert into users with name "Bob" and age 30
+  insert into users with name "Charlie" and age 20
+
+  show "Database ready for testing"
+end
+
+# Test 4: Conditional logic
+test "If-else chains work"
+  set score to 85
+  set grade to "none"
+
+  if score greaterthan 90 then
+    set grade to "A"
+  else if score greaterthan 80 then
+    set grade to "B"
+  else
+    set grade to "C"
+  end
+
+  assert grade equalto "B"
+end
+
+# Test 5: Object and array access
+test "Data structures support indexing"
+  set colors to ["red", "green", "blue"]
+  set config to {name: "test", port: 8080}
+
+  set firstColor to colors[0]
+  assert firstColor equalto "red"
+end
+
+# Test 6: Negative numbers
+test "Negative numbers work in comparisons"
+  set temp to -5
+  set balance to 100
+
+  assert temp lessthan 0
+  assert balance greaterthan 0
+end
+
+show ""
+show "=== All test blocks complete! ==="

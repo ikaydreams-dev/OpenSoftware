@@ -1,0 +1,19 @@
+create a database called "EcommerceStore"
+
+create these collections in it
+  users
+  products
+  categories
+  orders
+  order_items
+  cart
+  cart_items
+  reviews
+  wishlist
+  addresses
+  payments
+  shipping
+  coupons
+  inventory
+  vendors
+  notifications

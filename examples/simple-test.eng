@@ -1,0 +1,4 @@
+# Simple test
+set x to 5
+assert x equalto 5
+show "Test passed"

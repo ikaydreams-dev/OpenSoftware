@@ -1,0 +1,5 @@
+set name to "EnglishCode"
+set version to 1.0
+set active to true
+
+show "Testing variables!"

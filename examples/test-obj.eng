@@ -1,0 +1,2 @@
+set user to {name: "Bob", role: "admin", active: true}
+show user

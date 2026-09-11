@@ -1,0 +1,27 @@
+set message to "  Hello World  "
+
+show "Original:" show message
+
+set upper to message.uppercase()
+set lower to message.lowercase()
+set trimmed to message.trim()
+
+show "Uppercase:" show upper
+show "Lowercase:" show lower
+show "Trimmed:" show trimmed
+
+set words to message.split(" ")
+show "Words:" show words
+
+set numbers to [1, 2, 3]
+show "Original array:" show numbers
+
+numbers.push(4)
+numbers.push(5)
+show "After push:" show numbers
+
+set last to numbers.pop()
+show "Popped value:" show last
+show "After pop:" show numbers
+
+show "All method calls working!"

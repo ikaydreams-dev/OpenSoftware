@@ -1,0 +1,45 @@
+create a database called "PerformanceTest"
+
+create these collections in it
+  users
+  posts
+  comments
+  likes
+  shares
+  followers
+  notifications
+  messages
+
+set counter to 1
+set name to "User1"
+set status to "active"
+set verified to true
+
+insert into users with name "Alice" and age 25 and status "active"
+insert into users with name "Bob" and age 30 and status "active"
+insert into users with name "Charlie" and age 28 and status "pending"
+insert into users with name "David" and age 35 and status "active"
+insert into users with name "Eve" and age 27 and status "active"
+insert into users with name "Frank" and age 32 and status "inactive"
+insert into users with name "Grace" and age 29 and status "active"
+insert into users with name "Henry" and age 31 and status "active"
+insert into users with name "Ivy" and age 26 and status "pending"
+insert into users with name "Jack" and age 33 and status "active"
+
+insert into posts with title "First Post" and content "Hello World" and author "Alice"
+insert into posts with title "Second Post" and content "Testing" and author "Bob"
+insert into posts with title "Third Post" and content "Great day" and author "Charlie"
+insert into posts with title "Fourth Post" and content "Amazing" and author "David"
+insert into posts with title "Fifth Post" and content "Wonderful" and author "Eve"
+
+insert into comments with text "Nice post!" and author "Frank" and post_id 1
+insert into comments with text "Thanks!" and author "Alice" and post_id 1
+insert into comments with text "Cool" and author "Grace" and post_id 2
+insert into comments with text "Awesome" and author "Henry" and post_id 3
+insert into comments with text "Love it" and author "Ivy" and post_id 4
+
+select all from users
+select all from posts
+select all from comments
+
+show "Performance test complete!"

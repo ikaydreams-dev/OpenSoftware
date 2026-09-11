@@ -1,0 +1,23 @@
+create a database called "SaaSPlatform"
+
+create these collections in it
+  tenants
+  users
+  roles
+  permissions
+  subscriptions
+  billing
+  invoices
+  plans
+  features
+  api_keys
+  webhooks
+  audit_logs
+  sessions
+  teams
+  team_members
+  invitations
+  notifications
+  support_tickets
+  analytics
+  usage_metrics

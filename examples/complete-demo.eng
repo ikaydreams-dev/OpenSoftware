@@ -1,0 +1,60 @@
+show "=== EnglishCode Complete Demo ==="
+show ""
+
+show "1. Variables and Data Types"
+set name to "EnglishCode"
+set version to 1.0
+set isReady to true
+set features to ["HTML", "Functions", "Loops", "Database"]
+show name
+show version
+
+show ""
+show "2. Control Flow - If/Else"
+set score to 85
+if score greaterthan 80 then
+  show "Excellent!"
+otherwise
+  show "Good job!"
+end
+
+show ""
+show "3. Loops"
+show "For loop:"
+for i from 1 to 3
+  show i
+end
+
+show "For each loop:"
+for each feature in features
+  show feature
+end
+
+show ""
+show "4. Functions"
+define function multiply that takes x and y
+  show "Multiplying..."
+  return 42
+end
+
+call multiply with 6 and 7
+
+show ""
+show "5. HTML Generation"
+create a page called "demo" with title "EnglishCode Demo"
+add heading "Welcome to EnglishCode"
+add paragraph "Build websites in plain English!"
+add button labeled "Get Started"
+add button labeled "Learn More"
+render page "demo"
+
+show ""
+show "6. Web Server"
+create a web server on port 8080
+add route get "/api/status" returning "OK"
+show "Web server ready on http://localhost:8080"
+
+show ""
+show "=== Demo Complete! ==="
+show "EnglishCode is a fullstack programming language"
+show "where English IS the code."

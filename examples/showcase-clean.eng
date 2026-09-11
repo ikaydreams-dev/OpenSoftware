@@ -1,0 +1,50 @@
+set name to "EnglishCode"
+set version to "1.0.0"
+set downloads to 10000
+
+show "App:" show name
+show "Version:" show version
+show "Downloads:" show downloads
+
+set score to 95
+if score greaterthan 90 then
+  show "Excellent score!"
+end
+
+set counter to 1
+for i from 1 to 3
+  show i
+end
+
+set fruits to ["Apple", "Banana", "Cherry"]
+for each fruit in fruits
+  show fruit
+end
+
+define function greet that takes person
+  show "Hello from function!"
+end
+
+call greet with "Alice"
+
+create a database called "showcase_db"
+create collections called "users" in it
+
+insert into users with username "alice" and email "alice@test.com"
+show "Database created and populated!"
+
+create a page called "demo" with title "EnglishCode Showcase"
+add heading "Welcome!"
+add paragraph "Built entirely in English"
+add image from "https://via.placeholder.com/300" with alt "Demo"
+add button labeled "Click Me"
+
+show "Page generated!"
+render page "demo"
+
+create a web server on port 8080
+add route "/status" that returns "Running"
+start the server
+
+show "=== ALL FEATURES WORKING ==="
+show "Web app: http://localhost:8080/demo.html"

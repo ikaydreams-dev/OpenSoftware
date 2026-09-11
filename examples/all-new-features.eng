@@ -1,0 +1,86 @@
+# EnglishCode - All New Features Demo
+# Showcasing the 8 major features added in this session
+
+# 1. COMMENTS - Now supported!
+# You can write comments with # anywhere
+
+# 2. OBJECT LITERALS
+set user to {name: "Alice", email: "alice@example.com", age: 25, admin: true}
+show "User object:" show user
+
+set config to {host: "localhost", port: 8080, secure: false}
+show "Config:" show config
+
+# 3. ARRAY INDEXING
+set colors to ["red", "green", "blue", "yellow"]
+set first to colors[0]
+set third to colors[2]
+show "First color:" show first
+show "Third color:" show third
+
+# 4. NEGATIVE NUMBERS
+set temperature to -5
+set balance to -100
+show "Temperature:" show temperature
+show "Balance:" show balance
+
+# 5. METHOD CALLS
+set message to "  hello world  "
+set upper to message.uppercase()
+set trimmed to message.trim()
+set words to trimmed.split(" ")
+
+show "Original:" show message
+show "Uppercase:" show upper
+show "Trimmed:" show trimmed
+show "Words:" show words
+
+set numbers to [1, 2, 3]
+numbers.push(4)
+numbers.push(5)
+show "After push:" show numbers
+
+# 6. ELSE-IF CHAINS
+set score to 85
+if score greaterthan 90 then
+  show "Grade: A (Excellent!)"
+else if score greaterthan 80 then
+  show "Grade: B (Good job!)"
+else if score greaterthan 70 then
+  show "Grade: C (Keep trying)"
+else
+  show "Grade: F (Study more)"
+end
+
+# 7. AUTHENTICATION
+signup user "alice" with email "alice@test.com" and password "secret123"
+login user "alice" with password "secret123"
+show "Successfully logged in!"
+logout
+show "Logged out"
+
+# 8. WHERE CLAUSES FOR DATABASE
+create a database called "demo"
+create these collections in it
+  users
+  products
+
+insert into users with name "Alice" and age 25 and role "admin"
+insert into users with name "Bob" and age 30 and role "user"
+insert into users with name "Charlie" and age 20 and role "user"
+insert into users with name "Diana" and age 35 and role "admin"
+
+show "All users:"
+select all from users
+
+show "Users older than 25:"
+select all from users where age greaterthan 25
+
+show "Admin users:"
+select all from users where role equalto "admin"
+
+# BONUS: Combining features
+set data to {count: 100, items: [1, 2, 3], active: true}
+show "Complex data structure:" show data
+
+show "=== ALL 8 NEW FEATURES WORKING! ==="

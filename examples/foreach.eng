@@ -1,0 +1,40 @@
+# ForEach Loop Demo
+
+# Basic forEach with array
+set numbers to [1, 2, 3, 4, 5]
+
+show "Iterating over numbers:"
+for each num in numbers
+  show num
+end
+
+# ForEach with strings
+set names to ["Alice", "Bob", "Charlie"]
+
+show "Names list:"
+for each person in names
+  show "Hello, {person}!"
+end
+
+# ForEach with calculation
+set scores to [85, 92, 78, 95, 88]
+set total to 0
+
+for each score in scores
+  show "Score: {score}"
+end
+
+# Testing forEach
+test "ForEach loops work"
+  set items to [10, 20, 30]
+  set count to 0
+
+  for each item in items
+    set count to item
+  end
+
+  # Last item should be 30
+  assert count equalto 30
+end
+
+show "=== ForEach Complete! ==="

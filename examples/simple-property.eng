@@ -1,0 +1,6 @@
+# Simple property access test
+set person to {name: "Alice", age: 25}
+show person
+
+set personName to person.name
+show personName

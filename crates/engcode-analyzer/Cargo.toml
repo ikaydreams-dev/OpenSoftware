@@ -1,0 +1,8 @@
+[package]
+name = "engcode-analyzer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+engcode-parser = { path = "../engcode-parser" }
+thiserror.workspace = true

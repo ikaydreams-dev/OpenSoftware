@@ -1,0 +1,28 @@
+# Build output
+target/
+
+# Runtime database files (SQLite)
+databases/*.db
+databases/*.db-wal
+databases/*.db-shm
+databases/*.db-journal
+**/databases/*.db
+**/databases/*.db-wal
+**/databases/*.db-shm
+
+# Node / mobile build artifacts
+node_modules/
+mobile/node_modules/
+
+# Generated JS test junk
+config.txt
+lines.txt
+output.txt
+test.txt
+
+# macOS
+.DS_Store
+
+# IDE
+*.swp
+*.swo

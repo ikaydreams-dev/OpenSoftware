@@ -1,0 +1,12 @@
+[package]
+name = "engcode-stdlib"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+axum = "0.8.9"
+rusqlite.workspace = true
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1.53.0", features = ["full"] }

@@ -1,0 +1,24 @@
+create a database called "ProjectHub"
+
+create these collections in it
+  organizations
+  workspaces
+  projects
+  tasks
+  subtasks
+  milestones
+  sprints
+  boards
+  columns
+  users
+  team_members
+  roles
+  comments
+  attachments
+  time_tracking
+  labels
+  priorities
+  statuses
+  notifications
+  activity_log
+  integrations

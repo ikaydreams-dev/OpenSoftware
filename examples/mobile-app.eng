@@ -1,0 +1,17 @@
+create a page called "home" with title "My First Mobile App"
+
+add heading "Welcome to EnglishCode Mobile!"
+add paragraph "This app was built entirely in plain English"
+
+add image from "https://picsum.photos/400/200" with alt "Sample Image"
+
+add heading "Features"
+add paragraph "Build native iOS and Android apps"
+add paragraph "No JavaScript or Swift required"
+add paragraph "Just write in English!"
+
+add button labeled "Get Started"
+add button labeled "Learn More"
+
+show "Mobile app created successfully!"
+render page "home"

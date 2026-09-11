@@ -1,0 +1,37 @@
+# File I/O Demo
+
+# Write to a file
+set message to "Hello from EnglishCode!"
+write message to file "output.txt"
+
+# Read from the file
+read file "output.txt" into content
+show "File content:" show content
+
+# Append to file
+set moreText to "\nThis is an additional line."
+append moreText to file "output.txt"
+
+# Read updated file
+read file "output.txt" into updatedContent
+show "Updated content:" show updatedContent
+
+# Write array data
+set data to ["Line 1", "Line 2", "Line 3"]
+set joined to data.join("\n")
+write joined to file "lines.txt"
+
+# Write object as string
+set config to {name: "MyApp", version: "1.0", active: true}
+write config to file "config.txt"
+
+# Test file operations
+test "File I/O works"
+  set testData to "Test content"
+  write testData to file "test.txt"
+
+  read file "test.txt" into result
+  assert result equalto "Test content"
+end
+
+show "=== File I/O Complete! ==="

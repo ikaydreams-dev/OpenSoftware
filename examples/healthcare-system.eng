@@ -1,0 +1,25 @@
+create a database called "HealthcareSystem"
+
+create these collections in it
+  patients
+  doctors
+  nurses
+  staff
+  appointments
+  medical_records
+  prescriptions
+  medications
+  diagnoses
+  treatments
+  lab_results
+  imaging
+  vitals
+  allergies
+  immunizations
+  insurance
+  billing
+  payments
+  departments
+  rooms
+  equipment
+  emergency_contacts
