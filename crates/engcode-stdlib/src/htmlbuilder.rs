@@ -154,6 +154,7 @@ impl HtmlPage {
         html.push_str("      function hideModal(id) { var m = document.getElementById(id); if (m) { m.style.display = 'none'; } }\n");
         html.push_str("      function showTab(containerId, idx) { var c = document.getElementById(containerId); if (!c) return; var ps = c.querySelectorAll('.engc-tab-panel'); var bs = c.querySelectorAll('.engc-tab-button'); for (var i = 0; i < ps.length; i++) { ps[i].style.display = (i === idx) ? 'block' : 'none'; } for (var j = 0; j < bs.length; j++) { if (j === idx) { bs[j].classList.add('engc-tab-button-active'); } else { bs[j].classList.remove('engc-tab-button-active'); } } }\n");
         html.push_str("      function toggleAccordion(btn) { var item = btn.parentElement; item.classList.toggle('engc-open'); }\n");
+        html.push_str("      function engcSubmit(form) { var data = {}; var els = document.querySelectorAll('[name]'); for (var i = 0; i < els.length; i++) { var el = els[i]; data[el.name] = el.value; } var action = form.getAttribute('action') || window.location.pathname; var method = (form.getAttribute('method') || 'post').toUpperCase(); fetch(action, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(function (r) { return r.json(); }).then(function (json) { if (json.redirect) { window.location.href = json.redirect; return; } if (json.html) { var el = document.createElement('div'); el.innerHTML = json.html; form.insertAdjacentElement('afterend', el.firstChild); } if (json.message) { showToast(json.message); } }).catch(function (err) { showToast('Error: ' + JSON.stringify(err)); }); }\n");
         html.push_str("    </script>\n");
 
         html.push_str("</head>\n");
@@ -251,11 +252,12 @@ impl HtmlPage {
             HtmlElement::Form { action, method, children } => {
                 html.push_str(&indent);
                 html.push_str("<form");
+                html.push_str(" onsubmit=\"event.preventDefault(); engcSubmit(this); return false;\"");
                 if let Some(a) = action {
-                    html.push_str(&format!(" action=\"{}\"", a));
+                    html.push_str(&format!(" action=\"{}\"", escape_html(a)));
                 }
                 if let Some(m) = method {
-                    html.push_str(&format!(" method=\"{}\"", m));
+                    html.push_str(&format!(" method=\"{}\"", escape_html(m)));
                 }
                 html.push_str(">\n");
                 for child in children {

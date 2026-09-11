@@ -106,13 +106,21 @@ impl Interpreter {
             Statement::AddParagraph { text } => {
                 self.execute_add_paragraph(text)
             }
-            Statement::AddElement { .. } => Ok(()), // TODO
-            Statement::AddForm { .. } => Ok(()), // TODO
-            Statement::AddLink { .. } => Ok(()), // TODO
+            Statement::AddElement { element_type, properties } => {
+                self.execute_add_element(element_type, properties)
+            }
+            Statement::AddForm { properties } => {
+                self.execute_add_form(properties)
+            }
+            Statement::AddLink { text, url } => {
+                self.execute_add_link(text, url)
+            }
             Statement::AddImage { src, alt } => {
                 self.execute_add_image(src, alt)
             }
-            Statement::SetStyle { .. } => Ok(()), // TODO
+            Statement::SetStyle { selector, styles } => {
+                self.execute_set_style(selector, styles)
+            }
             Statement::RenderPage { page_name } => {
                 self.execute_render_page(page_name)
             }
@@ -1004,14 +1012,17 @@ impl Interpreter {
         }
     }
 
-    fn execute_add_button(&mut self, text: String, _properties: Vec<(String, Expression)>) -> Result<(), RuntimeError> {
+    fn execute_add_button(&mut self, text: String, properties: Vec<(String, Expression)>) -> Result<(), RuntimeError> {
         use engcode_stdlib::HtmlElement;
+
+        let id = self.property_string(&properties, "id");
+        let class = self.property_string(&properties, "class");
 
         if let Some(page) = self.context.get_html_page_mut() {
             page.add_element(HtmlElement::Button {
                 text: text.clone(),
-                id: None,
-                class: None,
+                id,
+                class,
                 onclick: None,
             });
             println!("  {} Added button: \"{}\"", "→".cyan(), text);
@@ -1023,17 +1034,25 @@ impl Interpreter {
         }
     }
 
-    fn execute_add_input(&mut self, input_type: String, _properties: Vec<(String, Expression)>) -> Result<(), RuntimeError> {
+    fn execute_add_input(&mut self, input_type: String, properties: Vec<(String, Expression)>) -> Result<(), RuntimeError> {
         use engcode_stdlib::HtmlElement;
+
+        let id = self.property_string(&properties, "id");
+        let name = self.property_string(&properties, "name");
+        let placeholder = self.property_string(&properties, "placeholder");
+        let required = properties
+            .iter()
+            .any(|(k, v)| k == "required" && matches!(v, Expression::Boolean(true)));
+        let value = self.property_string(&properties, "value");
 
         if let Some(page) = self.context.get_html_page_mut() {
             page.add_element(HtmlElement::Input {
                 input_type: input_type.clone(),
-                id: None,
-                name: None,
-                placeholder: None,
-                value: None,
-                required: false,
+                id,
+                name,
+                placeholder,
+                value,
+                required,
             });
             println!("  {} Added input: type=\"{}\"", "→".cyan(), input_type);
             Ok(())
@@ -1086,6 +1105,119 @@ impl Interpreter {
                 alt: alt.clone(),
             });
             println!("  {} Added image: src=\"{}\" alt=\"{}\"", "→".cyan(), src, alt);
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No page created. Use 'create a page called X' first.".to_string(),
+            ))
+        }
+    }
+
+    fn property_string(
+        &self,
+        properties: &[(String, Expression)],
+        key: &str,
+    ) -> Option<String> {
+        properties
+            .iter()
+            .find(|(k, _)| k == key)
+            .and_then(|(_, v)| match v {
+                Expression::String(s) => Some(s.clone()),
+                _ => None,
+            })
+    }
+
+    fn execute_add_link(&mut self, text: String, url: String) -> Result<(), RuntimeError> {
+        use engcode_stdlib::HtmlElement;
+
+        if let Some(page) = self.context.get_html_page_mut() {
+            page.add_element(HtmlElement::Link {
+                text: text.clone(),
+                href: url.clone(),
+            });
+            println!("  {} Added link: \"{}\" → {}", "→".cyan(), text, url);
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No page created. Use 'create a page called X' first.".to_string(),
+            ))
+        }
+    }
+
+    fn execute_add_form(
+        &mut self,
+        properties: Vec<(String, Expression)>,
+    ) -> Result<(), RuntimeError> {
+        use engcode_stdlib::HtmlElement;
+
+        let action = self.property_string(&properties, "action").unwrap_or_default();
+        let method = self
+            .property_string(&properties, "method")
+            .unwrap_or_else(|| "post".to_string());
+
+        if let Some(page) = self.context.get_html_page_mut() {
+            page.add_element(HtmlElement::Form {
+                action: if action.is_empty() { None } else { Some(action.clone()) },
+                method: Some(method.clone()),
+                children: Vec::new(),
+            });
+            println!(
+                "  {} Added form: action=\"{}\" method=\"{}\"",
+                "→".cyan(),
+                action,
+                method
+            );
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No page created. Use 'create a page called X' first.".to_string(),
+            ))
+        }
+    }
+
+    fn execute_add_element(
+        &mut self,
+        element_type: String,
+        properties: Vec<(String, Expression)>,
+    ) -> Result<(), RuntimeError> {
+        use engcode_stdlib::HtmlElement;
+
+        let text = self.property_string(&properties, "text");
+        let class = self.property_string(&properties, "class");
+        let id = self.property_string(&properties, "id");
+
+        if let Some(page) = self.context.get_html_page_mut() {
+            page.add_element(HtmlElement::Div {
+                id,
+                class,
+                children: text
+                    .into_iter()
+                    .map(|t| HtmlElement::Paragraph { text: t })
+                    .collect(),
+            });
+            println!("  {} Added element: <{}>", "→".cyan(), element_type);
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No page created. Use 'create a page called X' first.".to_string(),
+            ))
+        }
+    }
+
+    fn execute_set_style(
+        &mut self,
+        selector: String,
+        styles: Vec<(String, String)>,
+    ) -> Result<(), RuntimeError> {
+        if let Some(page) = self.context.get_html_page_mut() {
+            let entry = page
+                .styles
+                .entry(selector.clone())
+                .or_default();
+            for (prop, value) in styles {
+                entry.insert(prop.clone(), value.clone());
+            }
+            println!("  {} Set style for \"{}\"", "→".cyan(), selector);
             Ok(())
         } else {
             Err(RuntimeError::TypeError(

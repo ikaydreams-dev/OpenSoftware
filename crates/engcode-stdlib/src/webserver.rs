@@ -353,10 +353,7 @@ impl WebServer {
 
 async fn shutdown_signal(duration: Option<Duration>) {
     if let Some(d) = duration {
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {}
-            _ = tokio::time::sleep(d) => {}
-        }
+        tokio::time::sleep(d).await;
     } else {
         let _ = tokio::signal::ctrl_c().await;
     }

@@ -50,6 +50,8 @@ impl Parser {
                     Some(Token::Middleware) => self.parse_add_middleware(),
                     Some(Token::Button) => self.parse_add_button(),
                     Some(Token::Input) => self.parse_add_input(),
+                    Some(Token::Form) => self.parse_add_form(),
+                    Some(Token::Element) => self.parse_add_element(),
                     Some(Token::Heading) => self.parse_add_heading(),
                     Some(Token::Paragraph) => self.parse_add_paragraph(),
                     Some(Token::Image) | Some(Token::Icon) => self.parse_add_image(),
@@ -383,6 +385,30 @@ impl Parser {
             Token::Type => Some("type".to_string()),
             Token::Src => Some("src".to_string()),
             Token::Icon => Some("icon".to_string()),
+            // CSS-relevant tokens for style property names
+            Token::Font => Some("font".to_string()),
+            Token::Align => Some("align".to_string()),
+            Token::Display => Some("display".to_string()),
+            Token::Padding => Some("padding".to_string()),
+            Token::Margin => Some("margin".to_string()),
+            Token::Border => Some("border".to_string()),
+            Token::Background => Some("background".to_string()),
+            Token::Width => Some("width".to_string()),
+            Token::Height => Some("height".to_string()),
+            Token::Left => Some("left".to_string()),
+            Token::Right => Some("right".to_string()),
+            Token::Flex => Some("flex".to_string()),
+            Token::Grid => Some("grid".to_string()),
+            Token::Position => Some("position".to_string()),
+            Token::Overflow => Some("overflow".to_string()),
+            Token::Top => Some("top".to_string()),
+            Token::Bottom => Some("bottom".to_string()),
+            Token::Center => Some("center".to_string()),
+            Token::Hidden => Some("hidden".to_string()),
+            Token::Visible => Some("visible".to_string()),
+            Token::Row => Some("row".to_string()),
+            Token::Start => Some("start".to_string()),
+            Token::End => Some("end".to_string()),
             _ => None,
         }
     }
@@ -660,6 +686,13 @@ impl Parser {
         // `set cookie "name" to "value"` is a dedicated statement.
         if matches!(&self.current_token(), Token::Identifier(name) if name == "cookie") {
             return self.parse_set_cookie();
+        }
+
+        // `set style "selector" ...` is a dedicated statement.
+        if matches!(&self.current_token(), Token::Style)
+            || matches!(&self.current_token(), Token::Identifier(name) if name == "style")
+        {
+            return self.parse_set_style();
         }
 
         // Get variable name (allow keywords as variable names)
@@ -1261,8 +1294,27 @@ impl Parser {
             }
         };
 
-        // Parse optional properties (id, class, onclick, etc)
-        let properties = Vec::new(); // TODO: parse properties
+        // Parse optional properties: "with id X", "with class X"
+        let mut properties: Vec<(String, Expression)> = Vec::new();
+        loop {
+            if matches!(self.current_token(), Token::And) || matches!(self.current_token(), Token::With) {
+                self.advance();
+            } else {
+                break;
+            }
+            let key = match self.current_token() {
+                Token::Identifier(name) if name == "id" => "id".to_string(),
+                Token::Identifier(name) if name == "class" => "class".to_string(),
+                _ => break,
+            };
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                properties.push((key, Expression::String(s.clone())));
+                self.advance();
+            } else {
+                break;
+            }
+        }
 
         Ok(Statement::AddButton { text, properties })
     }
@@ -1286,19 +1338,29 @@ impl Parser {
 
         let mut properties: Vec<(String, Expression)> = Vec::new();
 
-        // Optional: "and placeholder <string>" / "with placeholder <string>"
+        // Optional additional properties: "and placeholder X", "and name X",
+        // "and required", "and value X"
         loop {
             if matches!(self.current_token(), Token::And) || matches!(self.current_token(), Token::With) {
                 self.advance();
             } else {
                 break;
             }
-            if !matches!(self.current_token(), Token::Placeholder) {
-                break;
-            }
+            let key = match self.current_token() {
+                Token::Placeholder => "placeholder".to_string(),
+                Token::Named => "name".to_string(),
+                Token::Identifier(name) if name == "name" => "name".to_string(),
+                Token::Required => "required".to_string(),
+                Token::Value => "value".to_string(),
+                _ => break,
+            };
             self.advance();
+            if key == "required" {
+                properties.push((key, Expression::Boolean(true)));
+                continue;
+            }
             if let Token::String(s) = self.current_token() {
-                properties.push(("placeholder".to_string(), Expression::String(s.clone())));
+                properties.push((key, Expression::String(s.clone())));
                 self.advance();
             } else {
                 break;
@@ -1309,6 +1371,199 @@ impl Parser {
             input_type,
             properties,
         })
+    }
+
+    fn parse_add_form(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        self.advance(); // consume "form"
+
+        // Skip optional: a/an/the
+        if matches!(self.current_token(), Token::A | Token::An | Token::The) {
+            self.advance();
+        }
+
+        let mut action = String::new();
+        let mut method = String::from("post");
+
+        // "with action '/api/contact' and method 'get'"
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+
+        if matches!(self.current_token(), Token::Identifier(n) if n == "action") {
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                action = s.clone();
+                self.advance();
+            }
+        }
+
+        if matches!(self.current_token(), Token::And) || matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+        if matches!(self.current_token(), Token::Identifier(n) if n == "method") {
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                method = s.clone().to_lowercase();
+                self.advance();
+            }
+        }
+
+        Ok(Statement::AddForm {
+            properties: vec![
+                ("action".to_string(), Expression::String(action)),
+                ("method".to_string(), Expression::String(method)),
+            ],
+        })
+    }
+
+    fn parse_add_element(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        self.advance(); // consume "element"
+
+        // Skip optional: a/an/the
+        if matches!(self.current_token(), Token::A | Token::An | Token::The) {
+            self.advance();
+        }
+
+        let element_type = match self.current_token() {
+            Token::String(s) => s.clone(),
+            Token::Identifier(s) => s.clone(),
+            Token::Div => "div".to_string(),
+            Token::Section => "section".to_string(),
+            Token::Header => "header".to_string(),
+            Token::Footer => "footer".to_string(),
+            Token::Span => "span".to_string(),
+            _ => return Err("Expected element type".to_string()),
+        };
+        self.advance();
+
+        let mut properties: Vec<(String, Expression)> = Vec::new();
+
+        // "with text '...'" / "with class '...'" / "with id '...'"
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+        loop {
+            let key = match self.current_token() {
+                Token::Text => "text".to_string(),
+                Token::Identifier(name) if name == "class" => "class".to_string(),
+                Token::Identifier(name) if name == "id" => "id".to_string(),
+                Token::Style => "style".to_string(),
+                _ => break,
+            };
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                properties.push((key, Expression::String(s.clone())));
+                self.advance();
+            } else {
+                break;
+            }
+            if matches!(self.current_token(), Token::And) {
+                self.advance();
+            }
+        }
+
+        Ok(Statement::AddElement {
+            element_type,
+            properties,
+        })
+    }
+
+    fn parse_set_style(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "set"
+
+        // Skip optional: the/style
+        if matches!(self.current_token(), Token::The)
+            || matches!(self.current_token(), Token::Style) {
+            self.advance();
+        }
+
+        let selector = match self.current_token() {
+            Token::String(s) => s.clone(),
+            Token::Identifier(s) => s.clone(),
+            _ => return Err("Expected style selector".to_string()),
+        };
+        self.advance();
+
+        // Optional connector: to/with/=
+        if matches!(self.current_token(), Token::To | Token::With | Token::Equals) {
+            self.advance();
+        }
+
+        let mut styles: Vec<(String, String)> = Vec::new();
+
+        // "color 'blue' and font-size '16px'" / "color is 'blue'"
+        loop {
+            // Build property name, joining identifier + minus + identifier runs.
+            let mut prop = String::new();
+            loop {
+                if let Some(seg) = self.token_as_identifier(self.current_token()) {
+                    if !prop.is_empty() {
+                        prop.push('-');
+                    }
+                    prop.push_str(&seg);
+                    self.advance();
+                } else if prop.is_empty() {
+                    break;
+                } else {
+                    break;
+                }
+                if matches!(self.current_token(), Token::Minus) {
+                    self.advance();
+                    if let Some(seg) = self.token_as_identifier(self.current_token()) {
+                        prop.push('-');
+                        prop.push_str(&seg);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if prop.is_empty() {
+                break;
+            }
+
+            // Skip optional connectors: is/=/to/with
+            if matches!(
+                self.current_token(),
+                Token::Is | Token::Equals | Token::To | Token::With
+            ) {
+                self.advance();
+            }
+
+            // Read value: string or number
+            let value = match self.current_token() {
+                Token::String(s) => {
+                    let v = s.clone();
+                    self.advance();
+                    v
+                }
+                Token::Number(n) => {
+                    let v = if n.fract() == 0.0 {
+                        format!("{}", *n as i64)
+                    } else {
+                        format!("{}", n)
+                    };
+                    self.advance();
+                    v
+                }
+                _ => break,
+            };
+
+            styles.push((prop, value));
+
+            if matches!(self.current_token(), Token::And) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        Ok(Statement::SetStyle { selector, styles })
     }
 
     fn parse_add_link(&mut self) -> Result<Statement, String> {
@@ -2466,6 +2721,77 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_set_style() {
+        let source = r#"set style "h1" with color "blue" and font-size "32px""#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            Statement::SetStyle { selector, styles } => {
+                assert_eq!(selector, "h1");
+                assert_eq!(styles.len(), 2);
+                assert_eq!(styles[0], ("color".to_string(), "blue".to_string()));
+                assert_eq!(styles[1], ("font-size".to_string(), "32px".to_string()));
+            }
+            _ => panic!("Expected SetStyle"),
+        }
+    }
+
+    #[test]
+    fn test_parse_add_form() {
+        let source = r#"add form with action "/api/contact" and method "post""#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        match &program.statements[0] {
+            Statement::AddForm { properties } => {
+                assert_eq!(properties[0], ("action".to_string(), Expression::String("/api/contact".to_string())));
+                assert_eq!(properties[1], ("method".to_string(), Expression::String("post".to_string())));
+            }
+            _ => panic!("Expected AddForm"),
+        }
+    }
+
+    #[test]
+    fn test_parse_add_input_with_name_and_required() {
+        let source = r#"add input with type "email" and name "email" and placeholder "you@example.com" and required"#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        match &program.statements[0] {
+            Statement::AddInput { input_type, properties } => {
+                assert_eq!(input_type, "email");
+                assert!(properties.len() >= 3, "expected placeholder/name/required, got {:?}", properties);
+                assert!(properties.iter().any(|(k, _)| k == "name"));
+                assert!(properties.iter().any(|(k, _)| k == "required"));
+                assert!(properties.iter().any(|(k, _)| k == "placeholder"));
+            }
+            _ => panic!("Expected AddInput"),
+        }
+    }
+
+    #[test]
+    fn test_parse_add_element() {
+        let source = r#"add element "div" with text "Hello" and class "card""#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        match &program.statements[0] {
+            Statement::AddElement { element_type, properties } => {
+                assert_eq!(element_type, "div");
+                assert!(properties.iter().any(|(k, _)| k == "text"));
+                assert!(properties.iter().any(|(k, _)| k == "class"));
+            }
+            _ => panic!("Expected AddElement"),
+        }
+    }
 
     #[test]
     fn test_parse_create_database() {
