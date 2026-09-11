@@ -26,6 +26,12 @@ The following were previously listed as broken but are now tested end-to-end:
 11. **Lifecycle control** — `start the server for 5 seconds` exits cleanly; Ctrl+C is graceful
 12. **Idempotent DB runs** — `create collections in it` resets existing collections, so re-running a script no longer duplicates rows
 13. **Data-backed routes** — `add route get "/api/users" returning rows from users` returns real DB rows as JSON
+14. **Form submissions** — `add form` + `add input with name` renders `<form onsubmit="engcSubmit(this)">`; named inputs are JSON-posted to the form's action; `handle post` receives the parsed JSON body
+15. **HTTP Cookies** — `set cookie "name" to "value"` / `set cookie "name" expires in 7 days` emit `Set-Cookie` headers; subsequent requests see the cookie via the `cookies` variable
+16. **CSS styling** — `set style "selector" with property "value"` outputs CSS blocks in generated pages (hyphenated properties like `font-size` supported)
+17. **CORS & Logging middleware** — `add middleware cors` adds `Access-Control-Allow-*` headers to all responses (including OPTIONS preflight); `add middleware logging` logs `[engcode] METHOD /path -> STATUS (Nms)`; middleware is applied at server start so routes added after are covered
+18. **Mobile navigation** — `navigate to page "profile"` and `go back` transpile to React Navigation's `navigation.navigate`/`navigation.goBack`; E2E build with React Navigation dependencies verified
+19. **Mobile data fetching** — `fetch data from "url"` transpiles to React `fetch` + `.then(data => setState(data))`; verified in E2E mobile build
 
 ---
 
@@ -125,9 +131,9 @@ login with github # Not implemented
 
 ## CATEGORY 3: Mobile Incomplete
 
-- Navigation (`navigate to page "profile"`, `go back`)
-- State management (no Context/Redux)
-- API calls from mobile (`fetch data from ...`)
+- ~~Navigation (`navigate to page "profile"`, `go back`)~~ ✅ works
+- State management (no Context/Redux) — basic assignment/state exists; no full Context
+- ~~API calls from mobile (`fetch data from ...`)~~ ✅ works (`.then(data => setState(data))`)
 - Native modules (camera, GPS, push notifications)
 - Biometric auth (FaceID/TouchID)
 - Deep linking
@@ -138,33 +144,36 @@ login with github # Not implemented
 
 ## CATEGORY 4: Web Development Gaps
 
-### Form Submissions - INCOMPLETE
-```englishcode
+### Form Submissions - ✅ DONE
+Forms now generate client-side JSON submission via `engcSubmit()`:
 
-create a form called "contact"
-submit form to "/api/contact" # No form-submission handling yet
+```englishcode
+add form with action "/api/contact" and method "post"
+add input with type "email" and name "email"
+add input with type "text" and name "subject"
+add button labeled "Send"
 ```
 
-**Status:** Forms/inputs render as HTML, but submit handling isn't wired up.
+`<form>` renders with `onsubmit="event.preventDefault(); engcSubmit(this); return false;"`.
+`engcSubmit` collects all `[name]` inputs and POSTs JSON to the form's `action`.
+A `handle post "/api/contact" with body as message` block receives it as a JSON object.
 
-### Form Validation - NOT IMPLEMENTED
+### Form Validation - NOT IMPLEMENTED (client-side)
 ```englishcode
-
 validate email is valid # Not implemented
 ```
 
+Server-side input validation via `validate request with` handler body IS implemented.
 
 ### JavaScript Generation - NOT IMPLEMENTED
 ```englishcode
-
 add onclick handler "alert('hi')" # Generates HTML but no JS
 ```
 
-**Status:** HTML + CSS only, no client-side JS generation.
+**Status:** HTML + CSS + minimal JS (engcSubmit) only; no general client-side JS.
 
 ### WebSockets - NOT IMPLEMENTED
 ```englishcode
-
 create websocket server on port 3001 # Not implemented
 ```
 
@@ -175,21 +184,22 @@ create websocket server on port 3001 # Not implemented
 ### File Uploads - NOT IMPLEMENTED
 **Status:** No multipart form handling.
 
-### HTTP Cookies - NOT IMPLEMENTED
+### HTTP Cookies - ✅ DONE (basic)
 ```englishcode
-
-set cookie "session" to "abc123" # Not implemented
+set cookie "session" to "abc123"  # works — sets Set-Cookie response header
 ```
 
-**Status:** Auth has session tokens in memory; no cookie handling.
+**Status:** `set cookie` / `set cookie name expires in N days` both work. Cookie values are sent back on subsequent requests and available via the `cookies` variable.
+Limitation: no automatic session persistence across requests (each fresh handler context; cross-request session state isn't automatic).
 
-### Middleware / CORS - NOT IMPLEMENTED
+### Middleware / CORS - ✅ DONE
 ```englishcode
-
-add middleware for authentication # Not implemented
-add cors headers # Not implemented
+add middleware cors       # adds Access-Control-Allow-* headers to all responses
+add middleware logging    # logs [engcode] METHOD /path -> STATUS (Nms) to stdout
 ```
 
+`add middleware` should appear BEFORE routes. Middleware is applied at server start,
+so routes added after `add middleware` are correctly covered.
 
 ### Rate Limiting - NOT IMPLEMENTED
 **Status:** No rate limiting.
@@ -205,7 +215,7 @@ test "addition works"
 end
 ```
 
-**Status:** Rust unit tests (54 passing) cover the engine, but there's no
+**Status:** Rust unit tests (59 passing) cover the engine, but there's no
 EnglishCode-level test/assert framework yet.
 
 ---

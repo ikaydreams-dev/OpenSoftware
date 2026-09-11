@@ -25,6 +25,7 @@ pub struct WebServer {
     router: Router,
     port: u16,
     data_cell: Arc<Mutex<Option<Database>>>,
+    middlewares: Vec<String>,
 }
 
 impl WebServer {
@@ -34,6 +35,7 @@ impl WebServer {
             router,
             port,
             data_cell: Arc::new(Mutex::new(None)),
+            middlewares: Vec::new(),
         }
     }
 
@@ -49,14 +51,11 @@ impl WebServer {
     }
 
     // Adds a middleware to the server. Supported types: "cors", "logging".
+    // Applied lazily in start() so it wraps every route, including ones added
+    // after this call (axum layers only affect routes present at layer time).
     pub fn add_middleware(&mut self, middleware_type: &str) {
         match middleware_type.to_lowercase().as_str() {
-            "cors" => {
-                self.router = self.router.clone().layer(middleware::from_fn(cors_middleware));
-            }
-            "logging" => {
-                self.router = self.router.clone().layer(middleware::from_fn(logging_middleware));
-            }
+            "cors" | "logging" => self.middlewares.push(middleware_type.to_lowercase()),
             _ => {}
         }
     }
@@ -325,7 +324,14 @@ impl WebServer {
 
     pub fn start(&self, duration: Option<Duration>) -> Result<(), String> {
         let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
-        let router = self.router.clone();
+        let mut router = self.router.clone();
+        for mw in &self.middlewares {
+            router = match mw.as_str() {
+                "cors" => router.layer(middleware::from_fn(cors_middleware)),
+                "logging" => router.layer(middleware::from_fn(logging_middleware)),
+                _ => router,
+            };
+        }
 
         // Create a new runtime for the web server
         let rt = Runtime::new().map_err(|e| e.to_string())?;
