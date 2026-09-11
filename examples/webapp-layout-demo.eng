@@ -1,0 +1,28 @@
+create database called "webapp2"
+create collections called "users" "files" in it
+
+insert into users with name is "sarah" and role is "admin" and age is 30
+insert into users with name is "jake" and role is "user" and age is 24
+insert into users with name is "maya" and role is "editor" and age is 28
+
+create a web server on port 4002
+add middleware logging
+add route get "/api/users" returning rows from users
+add route post "/api/users" returning rows from users
+add upload route "/api/upload" to "uploads"
+start the server for 8 seconds
+
+add css tailwind
+
+create layout called "base"
+add heading level 1 with text "My Website"
+add toast "Operation completed"
+add modal with title "Delete?" and content "Are you sure you want to delete this? "
+add spinner
+render layout "base"
+
+create page "about" with title "About" and layout "base"
+add heading level 1 with text "About this site"
+add paragraph with text "Built with EnglishCode. Users:"
+add alert "This site uses Tailwind CSS"
+render page "about"

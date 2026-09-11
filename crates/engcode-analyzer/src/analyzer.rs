@@ -54,6 +54,7 @@ impl SemanticAnalyzer {
                 Ok(())
             }
             Statement::Insert { .. } => Ok(()),
+            Statement::InsertRaw { .. } => Ok(()),
             Statement::Select { .. } => Ok(()),
             Statement::Update { .. } => Ok(()),
             Statement::Delete { .. } => Ok(()),
@@ -61,8 +62,20 @@ impl SemanticAnalyzer {
             Statement::AddRoute { .. } => Ok(()),
             Statement::AddDataRoute { .. } => Ok(()),
             Statement::StartServer { .. } => Ok(()),
+            Statement::AddHandler { body, .. } => {
+                for stmt in body {
+                    self.analyze_statement(stmt)?;
+                }
+                Ok(())
+            }
+            Statement::AddMiddleware { .. } => Ok(()),
             // HTML statements
             Statement::CreatePage { .. } => Ok(()),
+            Statement::AddCss { .. } => Ok(()),
+            Statement::CreateLayout { .. } => Ok(()),
+            Statement::RenderLayout { .. } => Ok(()),
+            Statement::AddUploadRoute { .. } => Ok(()),
+            Statement::AddUIComponent { .. } => Ok(()),
             Statement::AddElement { .. } => Ok(()),
             Statement::AddButton { .. } => Ok(()),
             Statement::AddForm { .. } => Ok(()),

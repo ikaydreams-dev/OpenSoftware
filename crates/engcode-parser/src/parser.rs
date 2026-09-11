@@ -47,14 +47,23 @@ impl Parser {
                 // Check what follows "add" to route to correct handler
                 match self.peek_token() {
                     Some(Token::Route) | Some(Token::Endpoint) => self.parse_add_route(),
+                    Some(Token::Middleware) => self.parse_add_middleware(),
                     Some(Token::Button) => self.parse_add_button(),
                     Some(Token::Input) => self.parse_add_input(),
                     Some(Token::Heading) => self.parse_add_heading(),
                     Some(Token::Paragraph) => self.parse_add_paragraph(),
                     Some(Token::Image) | Some(Token::Icon) => self.parse_add_image(),
+                    Some(Token::Style) => self.parse_add_css(),
+                    Some(Token::Identifier(name)) if name == "css" => self.parse_add_css(),
+                    Some(Token::Upload) => self.parse_add_upload_route(),
+                    Some(Token::Toast) | Some(Token::Alert) | Some(Token::Spinner)
+                    | Some(Token::Loading) | Some(Token::Modal) => {
+                        self.parse_add_ui_component()
+                    }
                     _ => self.parse_insert(), // Default to insert for data operations
                 }
             }
+            Token::Handle => self.parse_add_handler(),
             Token::Insert | Token::Put => self.parse_insert(),
             Token::Select | Token::Get | Token::Find | Token::Fetch => self.parse_select(),
             Token::Update | Token::Change | Token::Modify => self.parse_update(),
@@ -123,6 +132,9 @@ impl Parser {
             Token::Page => return self.parse_create_page(),
             Token::Database | Token::DB => self.parse_create_database(),
             Token::Collections | Token::Collection => self.parse_create_collections(),
+            Token::Identifier(name) if name == "layout" || name == "template" => {
+                return self.parse_create_layout()
+            }
             Token::These => {
                 self.advance();
                 self.parse_create_collections()
@@ -189,20 +201,30 @@ impl Parser {
             self.advance();
         }
 
-        self.consume(&Token::In)?;
-
-        // Skip optional pronoun
-        if matches!(self.current_token(), Token::It) {
+        // Form A: create collections called "users" "files" in it
+        let names = if matches!(self.current_token(), Token::Called | Token::Named) {
             self.advance();
-        }
-
-        // Skip newlines
-        while self.current_token() == &Token::Newline {
-            self.advance();
-        }
-
-        // Parse collection names
-        let names = self.parse_identifier_list()?;
+            let n = self.parse_identifier_list()?;
+            if matches!(self.current_token(), Token::In) {
+                self.advance();
+                if matches!(self.current_token(), Token::It | Token::These) {
+                    self.advance();
+                }
+            }
+            n
+        } else {
+            // Form B: create collections in it / then names on following lines
+            if matches!(self.current_token(), Token::In) {
+                self.advance();
+            }
+            if matches!(self.current_token(), Token::It | Token::These) {
+                self.advance();
+            }
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            self.parse_identifier_list()?
+        };
 
         Ok(Statement::CreateCollections {
             database: self.current_database.clone(),
@@ -221,9 +243,18 @@ impl Parser {
     fn parse_identifier_list(&mut self) -> Result<Vec<String>, String> {
         let mut names = Vec::new();
 
-        while let Token::Identifier(name) = self.current_token() {
-            names.push(name.clone());
-            self.advance();
+        loop {
+            match self.current_token() {
+                Token::Identifier(name) => {
+                    names.push(name.clone());
+                    self.advance();
+                }
+                Token::String(name) => {
+                    names.push(name.clone());
+                    self.advance();
+                }
+                _ => break,
+            }
 
             // Skip comma if present
             if self.current_token() == &Token::Comma {
@@ -332,6 +363,20 @@ impl Parser {
             Token::User => Some("user".to_string()),
             Token::Email => Some("email".to_string()),
             Token::Password => Some("password".to_string()),
+            Token::Status => Some("status".to_string()),
+            Token::Order => Some("order".to_string()),
+            Token::Limit => Some("limit".to_string()),
+            Token::Query => Some("query".to_string()),
+            Token::Search => Some("search".to_string()),
+            Token::Log => Some("log".to_string()),
+            Token::Token => Some("token".to_string()),
+            Token::Header => Some("header".to_string()),
+            Token::Session => Some("session".to_string()),
+            Token::File => Some("file".to_string()),
+            Token::Path => Some("path".to_string()),
+            Token::Type => Some("type".to_string()),
+            Token::Src => Some("src".to_string()),
+            Token::Icon => Some("icon".to_string()),
             _ => None,
         }
     }
@@ -374,6 +419,7 @@ impl Parser {
         Ok(Statement::CreateServer { port })
     }
 
+    // Parses: add route get "/health" returning "ok" [returning] status 200
     fn parse_add_route(&mut self) -> Result<Statement, String> {
         self.consume(&Token::Add)?;
 
@@ -385,6 +431,7 @@ impl Parser {
         // Get HTTP method (get, post, put, delete)
         let method = match self.current_token() {
             Token::Get => "GET",
+            Token::Post => "POST",
             Token::Put => "PUT",
             Token::Delete => "DELETE",
             Token::Identifier(s) if s.to_lowercase() == "post" => "POST",
@@ -430,13 +477,42 @@ impl Parser {
             });
         }
 
-        // Get response
-        let response = self.parse_expression()?;
+        // Optional leading status: "returning status <number>"
+        let mut status_code = None;
+        if matches!(self.current_token(), Token::Status) {
+            self.advance();
+            if let Token::Number(n) = self.current_token() {
+                status_code = Some(*n as u16);
+                self.advance();
+            }
+        }
+
+        // Get response (or a sensible default when only a status was given)
+        let response = if matches!(self.current_token(), Token::Newline | Token::EOF) {
+            Expression::String(format!("{} {} endpoint", method, path))
+        } else {
+            self.parse_expression()?
+        };
+
+        // Optional trailing status: "... <response> [returning] status <number>"
+        if status_code.is_none() {
+            if matches!(self.current_token(), Token::Identifier(s) if s == "returning") {
+                self.advance();
+            }
+            if matches!(self.current_token(), Token::Status) {
+                self.advance();
+                if let Token::Number(n) = self.current_token() {
+                    status_code = Some(*n as u16);
+                    self.advance();
+                }
+            }
+        }
 
         Ok(Statement::AddRoute {
             method: method.to_string(),
             path,
             response,
+            status_code,
         })
     }
 
@@ -473,6 +549,102 @@ impl Parser {
         }
 
         Ok(Statement::StartServer { duration_seconds })
+    }
+
+    // Parses: handle post "/api/users" with body as data [end]
+    //        handle get "/api/health" returning status 200 [end]
+    fn parse_add_handler(&mut self) -> Result<Statement, String> {
+        self.consume(&Token::Handle)?;
+
+        let method = match self.current_token() {
+            Token::Get => "GET",
+            Token::Post => "POST",
+            Token::Put => "PUT",
+            Token::Delete => "DELETE",
+            Token::Identifier(s) if s.to_lowercase() == "post" => "POST",
+            _ => return Err("Expected HTTP method (get, post, put, delete)".to_string()),
+        };
+        self.advance();
+
+        let path = match self.current_token() {
+            Token::String(s) => s.clone(),
+            _ => return Err("Expected route path in quotes".to_string()),
+        };
+        self.advance();
+
+        // Parse the header line: optional "with body as <var>" and optional "returning status <code>"
+        let mut body_var = String::new();
+        let mut status_code = None;
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+            if matches!(self.current_token(), Token::Body) {
+                self.advance();
+                if matches!(self.current_token(), Token::Identifier(s) if s == "as") {
+                    self.advance();
+                }
+                if let Some(name) = self.token_as_identifier(self.current_token()) {
+                    body_var = name.to_string();
+                    self.advance();
+                } else {
+                    return Err("Expected variable name after 'body as'".to_string());
+                }
+            }
+        }
+        if matches!(self.current_token(), Token::Return) {
+            self.advance();
+            if matches!(self.current_token(), Token::Status) {
+                self.advance();
+                if let Token::Number(n) = self.current_token() {
+                    status_code = Some(*n as u16);
+                    self.advance();
+                }
+            }
+        }
+
+        // Skip newline before the handler body
+        while matches!(self.current_token(), Token::Newline) {
+            self.advance();
+        }
+
+        // Parse the handler body until "end"
+        let mut body = Vec::new();
+        while !matches!(self.current_token(), Token::End | Token::EOF) {
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+                continue;
+            }
+            body.push(self.parse_statement()?);
+        }
+
+        // Skip "end"
+        if matches!(self.current_token(), Token::End) {
+            self.advance();
+        }
+
+        Ok(Statement::AddHandler {
+            method: method.to_string(),
+            path,
+            body_var,
+            body,
+            status_code,
+        })
+    }
+
+    // Parses: add middleware cors | add middleware logging
+    fn parse_add_middleware(&mut self) -> Result<Statement, String> {
+        self.consume(&Token::Add)?;
+        self.consume(&Token::Middleware)?;
+
+        let middleware_type = match self.current_token() {
+            Token::Cors => "cors",
+            Token::Log | Token::Logging => "logging",
+            Token::Identifier(s) if s.to_lowercase() == "cors" => "cors",
+            Token::Identifier(s) if s.to_lowercase() == "logging" || s.to_lowercase() == "log" => "logging",
+            _ => return Err("Expected 'cors' or 'logging' after 'add middleware'".to_string()),
+        }.to_string();
+        self.advance();
+
+        Ok(Statement::AddMiddleware { middleware_type })
     }
 
     fn parse_assignment(&mut self) -> Result<Statement, String> {
@@ -757,6 +929,25 @@ impl Parser {
             self.advance();
         }
 
+        // Raw value insertion: insert <expr> into <collection>
+        if !matches!(self.current_token(), Token::Into | Token::In) {
+            let saved = self.position;
+            if let Ok(value) = self.parse_expression() {
+                if matches!(self.current_token(), Token::Into | Token::In) {
+                    self.advance();
+                    let collection = match self.current_token() {
+                        Token::Identifier(name) => name.clone(),
+                        Token::String(name) => name.clone(),
+                        _ => return Err("Expected collection name after 'into'".to_string()),
+                    };
+                    self.advance();
+                    return Ok(Statement::InsertRaw { collection, value });
+                }
+            }
+            // Not a raw insert; backtrack and treat as standard form
+            self.position = saved;
+        }
+
         // Parse data as key-value pairs
         let mut data = Vec::new();
 
@@ -945,27 +1136,54 @@ impl Parser {
         };
         self.advance();
 
-        // Optional: with title "..."
-        let title = if matches!(self.current_token(), Token::With) {
-            self.advance();
-            if matches!(self.current_token(), Token::Title) {
-                self.advance();
-                match self.current_token() {
-                    Token::String(s) => {
-                        let t = Some(s.clone());
-                        self.advance();
-                        t
+        // Optional clauses: with title "..." and/or with layout "..."
+        let mut title = None;
+        let mut layout = None;
+        let mut done = false;
+        while !done {
+            match self.current_token() {
+                Token::With | Token::And => {
+                    self.advance();
+                    match self.current_token() {
+                        Token::Title => {
+                            self.advance();
+                            if let Token::String(s) = self.current_token() {
+                                title = Some(s.clone());
+                                self.advance();
+                            }
+                        }
+                        Token::Identifier(name) if name == "layout" => {
+                            self.advance();
+                            if let Token::String(s) = self.current_token() {
+                                layout = Some(s.clone());
+                                self.advance();
+                            }
+                        }
+                        _ => done = true,
                     }
-                    _ => None,
                 }
-            } else {
-                None
+                _ => done = true,
             }
-        } else {
-            None
-        };
+        }
 
-        Ok(Statement::CreatePage { name, title })
+        Ok(Statement::CreatePage { name, title, layout })
+    }
+
+    fn parse_create_layout(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "layout" or "template"
+
+        if matches!(self.current_token(), Token::Called | Token::Named) {
+            self.advance();
+        }
+
+        let name = match self.current_token() {
+            Token::String(s) => s.clone(),
+            Token::Identifier(s) => s.clone(),
+            _ => return Err("Expected layout name".to_string()),
+        };
+        self.advance();
+
+        Ok(Statement::CreateLayout { name })
     }
 
     fn parse_add_button(&mut self) -> Result<Statement, String> {
@@ -1037,7 +1255,27 @@ impl Parser {
         self.advance(); // consume "heading"
 
         // Get heading level (default h1)
-        let level = 1; // TODO: parse level
+        let mut level = 1;
+        if matches!(self.current_token(), Token::Number(n) if *n >= 1.0 && *n <= 6.0) {
+            if let Token::Number(n) = self.current_token() {
+                level = *n as u8;
+            }
+            self.advance();
+        } else if matches!(self.current_token(), Token::Identifier(s) if s == "level") {
+            self.advance();
+            if let Token::Number(n) = self.current_token() {
+                level = *n as u8;
+                self.advance();
+            }
+        }
+
+        // Skip "with text"
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+        if matches!(self.current_token(), Token::Text) {
+            self.advance();
+        }
 
         // Get text
         let text = match self.current_token() {
@@ -1055,6 +1293,14 @@ impl Parser {
     fn parse_add_paragraph(&mut self) -> Result<Statement, String> {
         self.advance(); // consume "add"
         self.advance(); // consume "paragraph"
+
+        // Skip "with text" / "with"
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+        if matches!(self.current_token(), Token::Text) {
+            self.advance();
+        }
 
         let text = match self.current_token() {
             Token::String(s) => {
@@ -1105,8 +1351,135 @@ impl Parser {
         Ok(Statement::AddImage { src, alt })
     }
 
+    fn parse_add_css(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        self.advance(); // consume "css" or "style"
+
+        // Skip optional "framework"
+        if matches!(self.current_token(), Token::Identifier(name) if name == "framework")
+            || matches!(self.current_token(), Token::Component)
+        {
+            self.advance();
+        }
+
+        let framework = match self.current_token() {
+            Token::Identifier(s) => s.clone(),
+            Token::String(s) => s.clone(),
+            _ => return Err("Expected CSS framework name (tailwind, bootstrap)".to_string()),
+        };
+        self.advance();
+
+        Ok(Statement::AddCss { framework })
+    }
+
+    fn parse_add_upload_route(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        self.advance(); // consume "upload"
+
+        // Skip optional "route" / "endpoint"
+        if matches!(self.current_token(), Token::Route | Token::Endpoint) {
+            self.advance();
+        }
+
+        // Get path in quotes
+        let path = match self.current_token() {
+            Token::String(s) => s.clone(),
+            _ => return Err("Expected upload route path in quotes".to_string()),
+        };
+        self.advance();
+
+        // Optional: to "uploads/" directory
+        let mut directory = "uploads".to_string();
+        if matches!(self.current_token(), Token::To | Token::Into | Token::In) {
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                directory = s.clone();
+                self.advance();
+            } else if let Token::Identifier(s) = self.current_token() {
+                directory = s.clone();
+                self.advance();
+            }
+        }
+
+        Ok(Statement::AddUploadRoute { path, directory })
+    }
+
+    fn parse_add_ui_component(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+
+        let component = match self.current_token() {
+            Token::Toast => "toast".to_string(),
+            Token::Alert => "alert".to_string(),
+            Token::Spinner | Token::Loading => "spinner".to_string(),
+            Token::Modal => "modal".to_string(),
+            _ => return Err("Expected UI component (toast, alert, spinner, modal)".to_string()),
+        };
+        self.advance();
+
+        // For spinner, no text needed
+        let mut text = String::new();
+        let mut title = None;
+
+        if component == "spinner" || component == "modal" {
+            // modal: add modal with title "..." and content "..."
+            //       or add modal "message"
+            if matches!(self.current_token(), Token::With) {
+                self.advance();
+                if matches!(self.current_token(), Token::Title) {
+                    self.advance();
+                    if let Token::String(s) = self.current_token() {
+                        title = Some(s.clone());
+                        self.advance();
+                    }
+                }
+                if matches!(self.current_token(), Token::And) {
+                    self.advance();
+                }
+                if matches!(self.current_token(), Token::Content | Token::Text) {
+                    self.advance();
+                    if let Token::String(s) = self.current_token() {
+                        text = s.clone();
+                        self.advance();
+                    }
+                }
+            } else if let Token::String(s) = self.current_token() {
+                text = s.clone();
+                self.advance();
+            }
+        } else {
+            // toast / alert: add toast "message"
+            if matches!(self.current_token(), Token::Labeled) {
+                self.advance();
+            }
+            if matches!(self.current_token(), Token::With) {
+                self.advance();
+                if matches!(self.current_token(), Token::Text) {
+                    self.advance();
+                }
+            }
+            if let Token::String(s) = self.current_token() {
+                text = s.clone();
+                self.advance();
+            }
+        }
+
+        Ok(Statement::AddUIComponent { component, text, title })
+    }
+
     fn parse_render_page(&mut self) -> Result<Statement, String> {
         self.advance(); // consume "render"
+
+        // render layout "base"
+        if matches!(self.current_token(), Token::Identifier(name) if name == "layout") {
+            self.advance();
+            let name = match self.current_token() {
+                Token::String(s) => s.clone(),
+                Token::Identifier(s) => s.clone(),
+                _ => return Err("Expected layout name".to_string()),
+            };
+            self.advance();
+            return Ok(Statement::RenderLayout { name });
+        }
 
         // Skip "page"
         if matches!(self.current_token(), Token::Page) {

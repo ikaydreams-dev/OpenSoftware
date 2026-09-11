@@ -26,3 +26,7 @@ test.txt
 # IDE
 *.swp
 *.swo
+# Generated web assets (produced by running apps)
+public/*.html
+public/layouts/
+uploads/

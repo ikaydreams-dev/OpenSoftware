@@ -1,15 +1,24 @@
-use axum::{
-    routing::{get, post},
+    use axum::{
+    body::Bytes,
+    extract::Query,
+    http::{header, Method, Request},
+    middleware::{self, Next},
+    response::{Html, IntoResponse, Response},
+    routing::{delete, get, post, put},
     Router, Json,
-    response::{Html, IntoResponse},
     http::StatusCode,
 };
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 use crate::database::Database;
+
+// A script-level route: body is passed in as parsed JSON (or None), the function
+// returns the JSON response plus the HTTP status code.
+pub type RouteFunc = dyn Fn(Option<Value>) -> Result<(Value, u16), String> + Send + Sync + 'static;
 
 pub struct WebServer {
     router: Router,
@@ -38,64 +47,295 @@ impl WebServer {
         self.data_cell.lock().map(|g| g.is_some()).unwrap_or(false)
     }
 
-    pub fn add_data_route(&mut self, method: &str, path: &str, collection: &str) {
-        // Queries the configured database live, on every request
-        let data_cell = self.data_cell.clone();
-        let collection = collection.to_string();
-        let route_path = path.to_string();
-
-        let handler = move || {
-            let data_cell = data_cell.clone();
-            async move {
-                let guard = data_cell.lock().unwrap();
-                match guard.as_ref().map(|db| db.select_all(&collection)) {
-                    Some(Ok(rows)) => {
-                        let vals: Vec<Value> = rows
-                            .iter()
-                            .filter_map(|r| serde_json::from_str::<Value>(r).ok())
-                            .collect();
-                        (StatusCode::OK, Json(json!({ "data": vals }))).into_response()
-                    }
-                    _ => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        Json(json!({ "error": "No database configured" })),
-                    ).into_response(),
-                }
+    // Adds a middleware to the server. Supported types: "cors", "logging".
+    pub fn add_middleware(&mut self, middleware_type: &str) {
+        match middleware_type.to_lowercase().as_str() {
+            "cors" => {
+                self.router = self.router.clone().layer(middleware::from_fn(cors_middleware));
             }
-        };
-
-        match method.to_lowercase().as_str() {
-            "get" => {
-                self.router = self.router.clone().route(&route_path, get(handler));
-            }
-            "post" => {
-                self.router = self.router.clone().route(&route_path, post(handler));
+            "logging" => {
+                self.router = self.router.clone().layer(middleware::from_fn(logging_middleware));
             }
             _ => {}
         }
     }
 
-    pub fn add_route(&mut self, method: &str, path: &str, handler: String) {
-        // Adds a route that returns the given static handler message
+    // Adds a multipart file upload route that saves uploaded files to a directory.
+    pub fn add_upload_route(&mut self, path: &str, directory: &str) {
+        let save_dir = directory.to_string();
+        let route_path = path.to_string();
+        let handler = move |mut multipart: axum::extract::Multipart| {
+            let save_dir = save_dir.clone();
+            async move {
+                let _ = std::fs::create_dir_all(&save_dir);
+                let mut saved = Vec::new();
+                while let Some(field) = multipart
+                    .next_field()
+                    .await
+                    .map_err(|e| (StatusCode::BAD_REQUEST, Json(json!({ "error": e.to_string(), "status": 400 }))))?
+                {
+                    let file_name = field
+                        .file_name()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("upload-{}", saved.len() + 1));
+                    let data = field
+                        .bytes()
+                        .await
+                        .map_err(|e| (StatusCode::BAD_REQUEST, Json(json!({ "error": e.to_string(), "status": 400 }))))?;
+                    let dest = std::path::Path::new(&save_dir).join(&file_name);
+                    if let Err(e) = std::fs::write(&dest, &data) {
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string(), "status": 500 }))));
+                    }
+                    saved.push(json!({
+                        "filename": file_name,
+                        "size": data.len(),
+                        "path": dest.to_string_lossy().to_string(),
+                    }));
+                }
+                Ok(Json(json!({ "uploaded": saved, "status": 201 })))
+            }
+        };
+        self.router = self.router.clone().route(&route_path, post(handler));
+    }
+
+    // Adds a script-level route handled by a closure installed by the interpreter.
+    pub fn add_script_route(&mut self, method: &str, path: &str, status: Option<u16>, func: Arc<RouteFunc>) {
+        let default_status = status.unwrap_or(200);
         let route_path = path.to_string();
 
         match method.to_lowercase().as_str() {
             "get" => {
-                self.router = self.router.clone().route(&route_path, get(move || {
-                    async move {
-                        Json(json!({ "message": handler }))
+                let handler = {
+                    let func = func.clone();
+                    move |body: Bytes| {
+                        let func = func.clone();
+                        async move {
+                            let body_value: Option<Value> = if body.is_empty() {
+                                None
+                            } else {
+                                serde_json::from_slice(&body).ok()
+                            };
+                            match func(body_value) {
+                                Ok((value, code)) => {
+                                    let code = if code == 0 { default_status } else { code };
+                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
+                                }
+                                Err(e) => (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({ "error": e, "status": 500 })),
+                                ).into_response(),
+                            }
+                        }
                     }
-                }));
+                };
+                self.router = self.router.clone().route(&route_path, get(handler));
             }
             "post" => {
-                self.router = self.router.clone().route(&route_path, post(move || {
-                    async move {
-                        Json(json!({ "message": handler }))
+                let handler = {
+                    let func = func.clone();
+                    move |body: Bytes| {
+                        let func = func.clone();
+                        async move {
+                            let body_value: Option<Value> = if body.is_empty() {
+                                None
+                            } else {
+                                serde_json::from_slice(&body).ok()
+                            };
+                            match func(body_value) {
+                                Ok((value, code)) => {
+                                    let code = if code == 0 { default_status } else { code };
+                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
+                                }
+                                Err(e) => (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({ "error": e, "status": 500 })),
+                                ).into_response(),
+                            }
+                        }
                     }
-                }));
+                };
+                self.router = self.router.clone().route(&route_path, post(handler));
+            }
+            "put" => {
+                let handler = {
+                    let func = func.clone();
+                    move |body: Bytes| {
+                        let func = func.clone();
+                        async move {
+                            let body_value: Option<Value> = if body.is_empty() {
+                                None
+                            } else {
+                                serde_json::from_slice(&body).ok()
+                            };
+                            match func(body_value) {
+                                Ok((value, code)) => {
+                                    let code = if code == 0 { default_status } else { code };
+                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
+                                }
+                                Err(e) => (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({ "error": e, "status": 500 })),
+                                ).into_response(),
+                            }
+                        }
+                    }
+                };
+                self.router = self.router.clone().route(&route_path, put(handler));
+            }
+            "delete" => {
+                let handler = {
+                    let func = func.clone();
+                    move |body: Bytes| {
+                        let func = func.clone();
+                        async move {
+                            let body_value: Option<Value> = if body.is_empty() {
+                                None
+                            } else {
+                                serde_json::from_slice(&body).ok()
+                            };
+                            match func(body_value) {
+                                Ok((value, code)) => {
+                                    let code = if code == 0 { default_status } else { code };
+                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
+                                }
+                                Err(e) => (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({ "error": e, "status": 500 })),
+                                ).into_response(),
+                            }
+                        }
+                    }
+                };
+                self.router = self.router.clone().route(&route_path, delete(handler));
             }
             _ => {}
         }
+    }
+
+    // Adds a data route backed by the configured database.
+    // GET:    returns rows (supports ?page=,&limit=,&sort=,&order=,&filter.<field>=)
+    // POST:   inserts the JSON body into the collection (returns 201 + created row)
+    // PUT:    updates the row identified by "id" in the JSON body
+    // DELETE: deletes the row identified by "id" in the JSON body or ?id=
+    pub fn add_data_route(&mut self, method: &str, path: &str, collection: &str) {
+        let data_cell = self.data_cell.clone();
+        let collection = collection.to_string();
+        let route_path = path.to_string();
+
+        match method.to_lowercase().as_str() {
+            "get" => {
+                let handler = {
+                    let data_cell = data_cell.clone();
+                    let collection = collection.clone();
+                    move |_method: Method, Query(params): Query<HashMap<String, String>>| {
+                        let data_cell = data_cell.clone();
+                        let collection = collection.clone();
+                        async move {
+                            handle_data_get(&data_cell, &collection, &params).await
+                        }
+                    }
+                };
+                self.router = self.router.clone().route(&route_path, get(handler));
+            }
+            "post" => {
+                let handler = {
+                    let data_cell = data_cell.clone();
+                    let collection = collection.clone();
+                    move |body: Bytes| {
+                        let data_cell = data_cell.clone();
+                        let collection = collection.clone();
+                        async move {
+                            handle_data_post(&data_cell, &collection, &body).await
+                        }
+                    }
+                };
+                self.router = self.router.clone().route(&route_path, post(handler));
+            }
+            "put" => {
+                let handler = {
+                    let data_cell = data_cell.clone();
+                    let collection = collection.clone();
+                    move |body: Bytes| {
+                        let data_cell = data_cell.clone();
+                        let collection = collection.clone();
+                        async move {
+                            handle_data_put(&data_cell, &collection, &body).await
+                        }
+                    }
+                };
+                self.router = self.router.clone().route(&route_path, put(handler));
+            }
+            "delete" => {
+                let handler = {
+                    let data_cell = data_cell.clone();
+                    let collection = collection.clone();
+                    move |_method: Method, Query(params): Query<HashMap<String, String>>, body: Bytes| {
+                        let data_cell = data_cell.clone();
+                        let collection = collection.clone();
+                        async move {
+                            handle_data_delete(&data_cell, &collection, &params, &body).await
+                        }
+                    }
+                };
+                self.router = self.router.clone().route(&route_path, delete(handler));
+            }
+            _ => {}
+        }
+    }
+
+    pub fn add_route(&mut self, method: &str, path: &str, handler: String, status: Option<u16>) {
+        let code = StatusCode::from_u16(status.unwrap_or(200)).unwrap_or(StatusCode::OK);
+        let route_path = path.to_string();
+
+        // MethodRouter with a handler that returns the static message and status.
+        // Build one handler closure reused across methods.
+        let make_router = |method: &str| -> axum::routing::MethodRouter {
+            match method.to_lowercase().as_str() {
+                "get" => get(move || {
+                    let handler = handler.clone();
+                    async move {
+                        (code, Json(json!({ "message": handler }))).into_response()
+                    }
+                }),
+                "post" => post(move || {
+                    let handler = handler.clone();
+                    async move {
+                        (code, Json(json!({ "message": handler }))).into_response()
+                    }
+                }),
+                "put" => put(move || {
+                    let handler = handler.clone();
+                    async move {
+                        (code, Json(json!({ "message": handler }))).into_response()
+                    }
+                }),
+                "delete" => delete(move || {
+                    let handler = handler.clone();
+                    async move {
+                        (code, Json(json!({ "message": handler }))).into_response()
+                    }
+                }),
+                _ => axum::routing::MethodRouter::new(),
+            }
+        };
+
+        let router = make_router(method);
+        self.router = self.router.clone().route(&route_path, router);
+    }
+
+    // Serves static files from public/ (CSS, JS, images, uploads).
+    pub fn serve_static_files(mut self) -> Self {
+        let assets_handler = |axum::extract::Path(path): axum::extract::Path<String>| {
+            async move { serve_file(format!("public/assets/{}", path)).await }
+        };
+        self.router = self.router.clone().route("/assets/{*path}", get(assets_handler));
+
+        let uploads_handler = |axum::extract::Path(path): axum::extract::Path<String>| {
+            async move { serve_file(format!("public/uploads/{}", path)).await }
+        };
+        self.router = self.router.clone().route("/uploads/{*path}", get(uploads_handler));
+
+        self
     }
 
     pub fn serve_html_pages(mut self) -> Self {
@@ -133,7 +373,7 @@ impl WebServer {
         // Create a new runtime for the web server
         let rt = Runtime::new().map_err(|e| e.to_string())?;
 
-        println!("🌐 Web server starting on http://127.0.0.1:{}", self.port);
+        println!("Web server starting on http://127.0.0.1:{}", self.port);
 
         rt.block_on(async {
             let listener = tokio::net::TcpListener::bind(addr)
@@ -169,13 +409,205 @@ pub fn create_server(port: u16) -> WebServer {
     WebServer::new(port)
 }
 
-// Renders a page from disk, expanding {{collection}} template markers
+// ---------------------------------------------------------------------------
+// Middleware
+// ---------------------------------------------------------------------------
+
+async fn cors_middleware(req: Request<axum::body::Body>, next: Next) -> Response {
+    if req.method() == Method::OPTIONS {
+        let mut response = Response::new(axum::body::Body::empty());
+        let headers = response.headers_mut();
+        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, header::HeaderValue::from_static("*"));
+        headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, header::HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
+        headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, header::HeaderValue::from_static("Content-Type, Authorization"));
+        *response.status_mut() = StatusCode::NO_CONTENT;
+        return response;
+    }
+
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, header::HeaderValue::from_static("*"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, header::HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, header::HeaderValue::from_static("Content-Type, Authorization"));
+    response
+}
+
+async fn logging_middleware(req: Request<axum::body::Body>, next: Next) -> Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let start = Instant::now();
+    let response = next.run(req).await;
+    let status = response.status();
+    println!("[engcode] {} {} -> {} ({}ms)", method, uri, status, start.elapsed().as_millis());
+    response
+}
+
+// ---------------------------------------------------------------------------
+// Data route handlers
+// ---------------------------------------------------------------------------
+
+async fn handle_data_get(
+    data_cell: &Arc<Mutex<Option<Database>>>,
+    collection: &str,
+    params: &HashMap<String, String>,
+) -> Response {
+    let page = params.get("page").and_then(|p| p.parse::<usize>().ok()).unwrap_or(1).max(1);
+    let limit = params
+        .get("limit")
+        .and_then(|p| p.parse::<usize>().ok())
+        .unwrap_or(100)
+        .clamp(1, 1000);
+    let sort = params.get("sort").map(|s| s.to_string());
+    let desc = params.get("order").map(|o| o.to_lowercase() == "desc").unwrap_or(false);
+
+    // Filter params: filter.<field>=<value>
+    let mut filter = serde_json::Map::new();
+    for (k, v) in params {
+        if let Some(field) = k.strip_prefix("filter.") {
+            if let Ok(n) = v.parse::<i64>() {
+                filter.insert(field.to_string(), json!(n));
+            } else if let Ok(f) = v.parse::<f64>() {
+                filter.insert(field.to_string(), json!(f));
+            } else if v.eq_ignore_ascii_case("true") {
+                filter.insert(field.to_string(), json!(true));
+            } else if v.eq_ignore_ascii_case("false") {
+                filter.insert(field.to_string(), json!(false));
+            } else {
+                filter.insert(field.to_string(), json!(v));
+            }
+        }
+    }
+
+    let guard = data_cell.lock().unwrap();
+    match guard.as_ref().map(|db| {
+        db.select_filtered(collection, &Value::Object(filter), sort.as_deref(), desc)
+    }) {
+        Some(Ok(rows)) => {
+            let total = rows.len();
+            let start = (page - 1) * limit;
+            let end = (start + limit).min(total);
+            let page_rows: Vec<Value> = rows[start..end].iter().map(|(_, v)| v.clone()).collect();
+            let pages = if limit == 0 { 0 } else { (total + limit - 1) / limit };
+
+            (StatusCode::OK, Json(json!({
+                "data": page_rows,
+                "meta": {
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                    "pages": pages
+                }
+            }))).into_response()
+        }
+        _ => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "error": "No database configured", "status": 503 })),
+        ).into_response(),
+    }
+}
+
+async fn handle_data_post(
+    data_cell: &Arc<Mutex<Option<Database>>>,
+    collection: &str,
+    body: &Bytes,
+) -> Response {
+    let Ok(payload) = serde_json::from_slice::<Value>(body) else {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid JSON body", "status": 400 }))).into_response();
+    };
+
+    let mut guard = data_cell.lock().unwrap();
+    match guard.as_mut() {
+        Some(db) => {
+            let data_str = payload.to_string();
+            match db.insert_with_id(collection, &data_str) {
+                Ok(id) => (StatusCode::CREATED, Json(json!({
+                    "data": payload,
+                    "id": id
+                }))).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                    "error": e.to_string(), "status": 500
+                }))).into_response(),
+            }
+        }
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "No database configured", "status": 503 }))).into_response(),
+    }
+}
+
+async fn handle_data_put(
+    data_cell: &Arc<Mutex<Option<Database>>>,
+    collection: &str,
+    body: &Bytes,
+) -> Response {
+    let Ok(mut payload) = serde_json::from_slice::<Value>(body) else {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid JSON body", "status": 400 }))).into_response();
+    };
+
+    let id = match payload.get("id").and_then(|v| v.as_i64()) {
+        Some(id) => id,
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Missing 'id' in body", "status": 400 }))).into_response();
+        }
+    };
+
+    let mut guard = data_cell.lock().unwrap();
+    match guard.as_mut() {
+        Some(db) => {
+            let Some(row) = db.get_row_by_id(collection, id).ok().flatten() else {
+                return (StatusCode::NOT_FOUND, Json(json!({ "error": "Row not found", "status": 404 }))).into_response();
+            };
+            let mut merged = row;
+            if let (Some(src), Some(dst)) = (payload.as_object_mut(), merged.as_object_mut()) {
+                src.remove("id");
+                for (k, v) in src.iter() {
+                    dst.insert(k.clone(), v.clone());
+                }
+            }
+            match db.update_row(collection, id, &merged.to_string()) {
+                Ok(()) => (StatusCode::OK, Json(json!({ "data": merged }))).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string(), "status": 500 }))).into_response(),
+            }
+        }
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "No database configured", "status": 503 }))).into_response(),
+    }
+}
+
+async fn handle_data_delete(
+    data_cell: &Arc<Mutex<Option<Database>>>,
+    collection: &str,
+    params: &HashMap<String, String>,
+    body: &Bytes,
+) -> Response {
+    let id_from_query = params.get("id").and_then(|v| v.parse::<i64>().ok());
+    let id_from_body = serde_json::from_slice::<Value>(body)
+        .ok()
+        .and_then(|v| v.get("id").and_then(|i| i.as_i64()).or_else(|| v.as_i64()));
+    let id = id_from_query.or(id_from_body);
+
+    let Some(id) = id else {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Missing 'id'", "status": 400 }))).into_response();
+    };
+
+    let mut guard = data_cell.lock().unwrap();
+    match guard.as_mut() {
+        Some(db) => match db.delete_by_id(collection, id) {
+            Ok(true) => (StatusCode::OK, Json(json!({ "deleted": id }))).into_response(),
+            Ok(false) => (StatusCode::NOT_FOUND, Json(json!({ "error": "Row not found", "status": 404 }))).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string(), "status": 500 }))).into_response(),
+        },
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "No database configured", "status": 503 }))).into_response(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Page rendering with templates
+// ---------------------------------------------------------------------------
+
 async fn render_page_from_disk(file_path: String, data_cell: Arc<Mutex<Option<Database>>>) -> impl IntoResponse {
     match tokio::fs::read_to_string(&file_path).await {
         Ok(contents) => {
             let guard = data_cell.lock().unwrap();
             let html = if let Some(db) = guard.as_ref() {
-                render_templates(&contents, db)
+                render_full_template(&contents, db)
             } else {
                 contents
             };
@@ -193,7 +625,7 @@ async fn serve_index_impl(data_cell: Arc<Mutex<Option<Database>>>) -> impl IntoR
         Ok(contents) => {
             let guard = data_cell.lock().unwrap();
             let html = if let Some(db) = guard.as_ref() {
-                render_templates(&contents, db)
+                render_full_template(&contents, db)
             } else {
                 contents
             };
@@ -203,7 +635,7 @@ async fn serve_index_impl(data_cell: Arc<Mutex<Option<Database>>>) -> impl IntoR
             Ok(contents) => {
                 let guard = data_cell.lock().unwrap();
                 let html = if let Some(db) = guard.as_ref() {
-                    render_templates(&contents, db)
+                    render_full_template(&contents, db)
                 } else {
                     contents
                 };
@@ -214,21 +646,155 @@ async fn serve_index_impl(data_cell: Arc<Mutex<Option<Database>>>) -> impl IntoR
     }
 }
 
-// Replaces every {{collection_name}} marker with an HTML table of that collection's rows
-fn render_templates(contents: &str, db: &Database) -> String {
-    let mut result = contents.to_string();
-    while let Some(start) = result.find("{{") {
-        let rest = &result[start + 2..];
-        let Some(rel_end) = rest.find("}}") else { break };
-        let end = start + 2 + rel_end; // index of the first '}' of '}}'
-        let name = rest[..rel_end].trim().to_string();
-        let replacement = match db.select_all(&name) {
-            Ok(rows) => render_collection_table(&rows),
-            Err(_) => format!("<!-- collection '{}' not found -->", name),
-        };
-        result.replace_range(start..=end + 1, &replacement);
+// Main template entry point. Supports:
+//   {{collection}}                  -> table of a collection
+//   {{each <var> in <collection>}}  -> repeat the body for every row; {{<var>.<field>}}
+//   {{if <collection>}} / {{if not <collection>}} -> conditional block
+async fn serve_file(path: String) -> impl IntoResponse {
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let content_type = match path.rsplit('.').next().unwrap_or("") {
+                "css" => "text/css",
+                "js" => "application/javascript",
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "svg" => "image/svg+xml",
+                "ico" => "image/x-icon",
+                _ => "application/octet-stream",
+            };
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, content_type)],
+                bytes,
+            ).into_response()
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
     }
-    result
+}
+
+fn render_full_template(contents: &str, db: &Database) -> String {
+    render_block_with_vars(contents, db, &[])
+}
+
+type ScopeVar = (String, Value);
+
+fn render_block_with_vars(block: &str, db: &Database, vars: &[ScopeVar]) -> String {
+    let mut out = String::new();
+    let mut i = 0;
+    let bytes = block.as_bytes();
+
+    while i < bytes.len() {
+        if block[i..].starts_with("{{") {
+            let Some(rel_end) = block[i + 2..].find("}}") else {
+                out.push_str(&block[i..]);
+                break;
+            };
+            let marker = &block[i + 2..i + 2 + rel_end];
+            let marker = marker.trim();
+
+            if let Some(spec) = marker.strip_prefix("each ") {
+                let body_after_marker = i + 2 + rel_end + 2;
+                let (inner, next_i) = extract_block(block, body_after_marker, "{{endeach}}");
+                out.push_str(&render_each_block(spec, &inner, db, vars));
+                i = next_i;
+            } else if let Some(cond) = marker.strip_prefix("if ") {
+                let body_after_marker = i + 2 + rel_end + 2;
+                let (inner, next_i) = extract_block(block, body_after_marker, "{{endif}}");
+                out.push_str(&render_if_block(cond, &inner, db, vars));
+                i = next_i;
+            } else {
+                out.push_str(&render_reference(marker, db, vars));
+                i += 2 + rel_end + 2;
+            }
+        } else {
+            match block[i..].find("{{") {
+                Some(next) => {
+                    out.push_str(&block[i..i + next]);
+                    i += next;
+                }
+                None => {
+                    out.push_str(&block[i..]);
+                    break;
+                }
+            }
+        }
+    }
+
+    out
+}
+
+// Extracts the text between the current position and the closing marker.
+fn extract_block(block: &str, start: usize, closer: &str) -> (String, usize) {
+    match block[start..].find(closer) {
+        Some(pos) => (block[start..start + pos].to_string(), start + pos + closer.len()),
+        None => (block[start..].to_string(), block.len()),
+    }
+}
+
+fn render_each_block(spec: &str, inner: &str, db: &Database, vars: &[ScopeVar]) -> String {
+    // spec is "<var> in <collection>"
+    let parts: Vec<&str> = spec.splitn(3, " in ").collect();
+    if parts.len() != 3 {
+        return String::new();
+    }
+    let var_name = parts[0].trim();
+    let collection = parts[2].trim();
+
+    let Ok(rows) = db.select_all(collection) else {
+        return format!("<!-- collection '{}' not found -->", collection);
+    };
+
+    let mut out = String::new();
+    for row in rows {
+        if let Ok(value) = serde_json::from_str::<Value>(&row) {
+            let mut scope = vars.to_vec();
+            scope.push((var_name.to_string(), value));
+            out.push_str(&render_block_with_vars(inner, db, &scope));
+        }
+    }
+    out
+}
+
+fn render_if_block(cond: &str, inner: &str, db: &Database, vars: &[ScopeVar]) -> String {
+    let negate = cond.trim_start().starts_with("not ");
+    let name = cond.trim_start().trim_start_matches("not ").trim();
+    let has_rows = db.select_all(name).map(|r| !r.is_empty()).unwrap_or(false);
+    if has_rows && !negate || !has_rows && negate {
+        render_block_with_vars(inner, db, vars)
+    } else {
+        String::new()
+    }
+}
+
+fn render_reference(marker: &str, db: &Database, vars: &[ScopeVar]) -> String {
+    // Field reference: <var>.<field>
+    if let Some(dot) = marker.find('.') {
+        let var_name = &marker[..dot];
+        let field = &marker[dot + 1..];
+        if let Some((_, value)) = vars.iter().rev().find(|(name, _)| name == var_name) {
+            return field_value_to_text(value, field);
+        }
+    }
+
+    // Plain variable reference
+    if let Some((_, value)) = vars.iter().rev().find(|(name, _)| name == marker) {
+        return json_value_to_text(value);
+    }
+
+    // Collection table
+    if let Ok(rows) = db.select_all(marker) {
+        return render_collection_table(&rows);
+    }
+
+    format!("<!-- '{}' not found -->", marker)
+}
+
+fn field_value_to_text(value: &Value, field: &str) -> String {
+    match value.get(field) {
+        Some(v) => json_value_to_text(v),
+        None => String::new(),
+    }
 }
 
 // Renders rows (JSON strings) as an HTML table with unioned columns

@@ -137,6 +137,61 @@ impl Database {
 
         Ok(collections)
     }
+
+    pub fn insert_with_id(&mut self, collection_name: &str, data: &str) -> Result<i64, DatabaseError> {
+        let query = format!(
+            "INSERT INTO {} (data) VALUES (?)",
+            sanitize_table_name(collection_name)
+        );
+        self.connection.execute(&query, [data])?;
+        Ok(self.connection.last_insert_rowid())
+    }
+
+    // Returns rows (id, parsed JSON) matching an equality filter, optionally sorted.
+    pub fn select_filtered(
+        &self,
+        collection_name: &str,
+        filter: &serde_json::Value,
+        sort_field: Option<&str>,
+        desc: bool,
+    ) -> Result<Vec<(i64, serde_json::Value)>, DatabaseError> {
+        let mut rows: Vec<(i64, serde_json::Value)> = Vec::new();
+        for (id, data) in self.select_rows(collection_name)? {
+            let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) else {
+                continue;
+            };
+            if matches_condition(&parsed, filter) {
+                rows.push((id, parsed));
+            }
+        }
+
+        if let Some(field) = sort_field {
+            rows.sort_by(|a, b| compare_values(&a.1, &b.1, field));
+            if desc {
+                rows.reverse();
+            }
+        }
+
+        Ok(rows)
+    }
+
+    pub fn get_row_by_id(&self, collection_name: &str, id: i64) -> Result<Option<serde_json::Value>, DatabaseError> {
+        for (row_id, data) in self.select_rows(collection_name)? {
+            if row_id == id {
+                return Ok(serde_json::from_str::<serde_json::Value>(&data).ok());
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn delete_by_id(&mut self, collection_name: &str, id: i64) -> Result<bool, DatabaseError> {
+        let query = format!(
+            "DELETE FROM {} WHERE id = ?",
+            sanitize_table_name(collection_name)
+        );
+        let affected = self.connection.execute(&query, rusqlite::params![id])?;
+        Ok(affected > 0)
+    }
 }
 
 // Sanitize table name to prevent SQL injection
@@ -176,6 +231,28 @@ pub fn update_row(db: &Database, collection: &str, id: i64, data: &str) -> Resul
 
 pub fn delete_rows_by_ids(db: &Database, collection: &str, ids: &[i64]) -> Result<(), DatabaseError> {
     db.delete_rows_by_ids(collection, ids)
+}
+
+pub fn insert_with_id(db: &mut Database, collection: &str, data: &str) -> Result<i64, DatabaseError> {
+    db.insert_with_id(collection, data)
+}
+
+pub fn select_filtered(
+    db: &Database,
+    collection: &str,
+    filter: &serde_json::Value,
+    sort_field: Option<&str>,
+    desc: bool,
+) -> Result<Vec<(i64, serde_json::Value)>, DatabaseError> {
+    db.select_filtered(collection, filter, sort_field, desc)
+}
+
+pub fn get_row_by_id(db: &Database, collection: &str, id: i64) -> Result<Option<serde_json::Value>, DatabaseError> {
+    db.get_row_by_id(collection, id)
+}
+
+pub fn delete_by_id(db: &mut Database, collection: &str, id: i64) -> Result<bool, DatabaseError> {
+    db.delete_by_id(collection, id)
 }
 
 pub fn query_data(db: &Database, collection: &str, condition: &str) -> Result<Vec<String>, DatabaseError> {
@@ -244,6 +321,29 @@ fn matches_condition(row: &serde_json::Value, cond: &serde_json::Value) -> bool 
             _ => false,
         }
     })
+}
+
+// Compares two JSON rows by the given field, for sorting.
+fn compare_values(a: &serde_json::Value, b: &serde_json::Value, field: &str) -> std::cmp::Ordering {
+    match (a.get(field), b.get(field)) {
+        (Some(serde_json::Value::Number(x)), Some(serde_json::Value::Number(y))) => {
+            x.as_f64().partial_cmp(&y.as_f64()).unwrap_or(std::cmp::Ordering::Equal)
+        }
+        (Some(x), Some(y)) => {
+            let xs = match x {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            let ys = match y {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            xs.cmp(&ys)
+        }
+        (None, None) => std::cmp::Ordering::Equal,
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+    }
 }
 
 #[cfg(test)]

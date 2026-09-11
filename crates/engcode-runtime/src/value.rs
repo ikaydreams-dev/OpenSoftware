@@ -347,6 +347,46 @@ impl From<HashMap<String, Value>> for Value {
     }
 }
 
+// Converts a serde_json::Value into a runtime Value.
+pub fn value_from_json(json: &serde_json::Value) -> Value {
+    match json {
+        serde_json::Value::Null => Value::Null,
+        serde_json::Value::Bool(b) => Value::Boolean(*b),
+        serde_json::Value::Number(n) => Value::Number(n.as_f64().unwrap_or(0.0)),
+        serde_json::Value::String(s) => Value::String(s.clone()),
+        serde_json::Value::Array(items) => {
+            Value::Array(items.iter().map(value_from_json).collect())
+        }
+        serde_json::Value::Object(map) => {
+            let mut obj = HashMap::new();
+            for (k, v) in map {
+                obj.insert(k.clone(), value_from_json(v));
+            }
+            Value::Object(obj)
+        }
+    }
+}
+
+// Converts a runtime Value into a serde_json::Value.
+pub fn value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Null => serde_json::Value::Null,
+        Value::Number(n) => serde_json::Number::from_f64(*n)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        Value::String(s) => serde_json::Value::String(s.clone()),
+        Value::Boolean(b) => serde_json::Value::Bool(*b),
+        Value::Array(items) => serde_json::Value::Array(items.iter().map(value_to_json).collect()),
+        Value::Object(map) => {
+            let mut obj = serde_json::Map::new();
+            for (k, v) in map {
+                obj.insert(k.clone(), value_to_json(v));
+            }
+            serde_json::Value::Object(obj)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -32,7 +32,7 @@ impl MobileTranspiler {
 
     fn transpile_statement(&mut self, stmt: &Statement) -> Result<()> {
         match stmt {
-            Statement::CreatePage { name, title } => {
+            Statement::CreatePage { name, title, .. } => {
                 self.transpile_page(name, title.as_deref())
             }
             Statement::AddButton { text, properties } => {
@@ -230,6 +230,7 @@ mod tests {
             Statement::CreatePage {
                 name: "home".to_string(),
                 title: Some("Welcome".to_string()),
+                layout: None,
             },
             Statement::AddHeading {
                 level: 1,

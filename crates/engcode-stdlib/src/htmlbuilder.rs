@@ -3,6 +3,8 @@ use std::collections::HashMap;
 pub struct HtmlPage {
     pub name: String,
     pub title: String,
+    pub layout: Option<String>,
+    pub css_framework: Option<String>,
     pub elements: Vec<HtmlElement>,
     pub styles: HashMap<String, HashMap<String, String>>,
 }
@@ -48,6 +50,20 @@ pub enum HtmlElement {
         method: Option<String>,
         children: Vec<HtmlElement>,
     },
+    Placeholder {
+        marker: String,
+    },
+    Toast {
+        text: String,
+    },
+    Alert {
+        text: String,
+    },
+    Spinner,
+    Modal {
+        title: String,
+        content: String,
+    },
 }
 
 impl HtmlPage {
@@ -55,6 +71,8 @@ impl HtmlPage {
         Self {
             name: name.clone(),
             title: title.unwrap_or(name),
+            layout: None,
+            css_framework: None,
             elements: Vec::new(),
             styles: HashMap::new(),
         }
@@ -80,7 +98,14 @@ impl HtmlPage {
         html.push_str("<head>\n");
         html.push_str("    <meta charset=\"UTF-8\">\n");
         html.push_str("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
-        html.push_str(&format!("    <title>{}</title>\n", self.title));
+        html.push_str(&format!("    <title>{}</title>\n", escape_html(&self.title)));
+
+        // CSS framework CDN link
+        if let Some(framework) = &self.css_framework {
+            if let Some(cdn) = css_framework_cdn(framework) {
+                html.push_str(&format!("    {}\n", cdn));
+            }
+        }
 
         // Styles
         if !self.styles.is_empty() {
@@ -94,6 +119,12 @@ impl HtmlPage {
             }
             html.push_str("    </style>\n");
         }
+
+        html.push_str("    <script>\n");
+        html.push_str("      function showToast(text) { var t = document.getElementById('engc-toast'); if (t) { t.innerHTML = text; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 3000); } }\n");
+        html.push_str("      function showModal(id) { var m = document.getElementById(id); if (m) { m.style.display = 'flex'; } }\n");
+        html.push_str("      function hideModal(id) { var m = document.getElementById(id); if (m) { m.style.display = 'none'; } }\n");
+        html.push_str("    </script>\n");
 
         html.push_str("</head>\n");
         html.push_str("<body>\n");
@@ -203,6 +234,47 @@ impl HtmlPage {
                 html.push_str(&indent);
                 html.push_str("</form>\n");
             }
+            HtmlElement::Placeholder { marker } => {
+                html.push_str(&indent);
+                html.push_str(marker);
+                html.push('\n');
+            }
+            HtmlElement::Toast { text } => {
+                html.push_str(&indent);
+                html.push_str("<div id=\"engc-toast\" style=\"display:none;position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:12px 20px;border-radius:6px;z-index:9999;box-shadow:0 2px 10px rgba(0,0,0,0.3);\">");
+                html.push_str(&escape_html(text));
+                html.push_str("</div>\n");
+            }
+            HtmlElement::Alert { text } => {
+                html.push_str(&indent);
+                html.push_str("<div class=\"engc-alert\" style=\"background:#fff3cd;border:1px solid #ffe08a;color:#664d03;padding:12px 16px;border-radius:6px;margin-bottom:12px;\">");
+                html.push_str(&escape_html(text));
+                html.push_str("</div>\n");
+            }
+            HtmlElement::Spinner => {
+                html.push_str(&indent);
+                html.push_str("<div class=\"engc-spinner\" style=\"display:inline-block;width:24px;height:24px;border:3px solid rgba(0,0,0,0.1);border-top-color:#007bff;border-radius:50%;animation:spin 0.8s linear infinite;\"></div>\n");
+            }
+            HtmlElement::Modal { title, content } => {
+                let id = format!("engc-modal-{}", html.len());
+                html.push_str(&indent);
+                html.push_str(&format!(
+                    "<div id=\"{}\" style=\"display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:10000;\">\n",
+                    id
+                ));
+                html.push_str(&indent);
+                html.push_str("  <div style=\"background:#fff;padding:24px;border-radius:8px;max-width:480px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.2);\">\n");
+                html.push_str(&indent);
+                html.push_str(&format!("    <h3 style=\"margin-top:0;\">{}</h3>\n", escape_html(title)));
+                html.push_str(&indent);
+                html.push_str(&format!("    <p>{}</p>\n", escape_html(content)));
+                html.push_str(&indent);
+                html.push_str(&format!("    <button onclick=\"hideModal('{}')\" style=\"margin-top:12px;\">Close</button>\n", id));
+                html.push_str(&indent);
+                html.push_str("  </div>\n");
+                html.push_str(&indent);
+                html.push_str("</div>\n");
+            }
         }
 
         html
@@ -210,7 +282,6 @@ impl HtmlPage {
 
     pub fn save_to_file(&self, directory: &str) -> std::io::Result<String> {
         use std::fs;
-        use std::path::Path;
 
         // Create directory if it doesn't exist
         fs::create_dir_all(directory)?;
@@ -257,7 +328,32 @@ pub fn create_default_styles() -> HashMap<String, HashMap<String, String>> {
     input_styles.insert("margin-bottom".to_string(), "10px".to_string());
     styles.insert("input".to_string(), input_styles);
 
+    // Spinner animation
+    let mut spinner_styles = HashMap::new();
+    spinner_styles.insert("animation".to_string(), "engc-spin 0.8s linear infinite".to_string());
+    styles.insert("@keyframes engc-spin".to_string(), spinner_styles.clone());
+    styles.insert("@keyframes spin".to_string(), spinner_styles);
+
     styles
+}
+
+pub fn css_framework_cdn(framework: &str) -> Option<String> {
+    match framework.to_lowercase().as_str() {
+        "tailwind" | "tailwindcss" => Some("<script src=\"https://cdn.tailwindcss.com\"></script>".to_string()),
+        "bootstrap" => Some("<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css\">".to_string()),
+        "bulma" => Some("<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css\">".to_string()),
+        "foundation" => Some("<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/foundation-sites@6.9.0/dist/css/foundation.min.css\">".to_string()),
+        "watercss" | "water" => Some("<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/water.css@2/out/water.css\">".to_string()),
+        "sakura" | "sakuracss" => Some("<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/sakura.css@1.5.0/css/sakura.css\">".to_string()),
+        _ => None,
+    }
+}
+
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 #[cfg(test)]

@@ -35,6 +35,14 @@ impl AuthSystem {
         }
     }
 
+    pub fn database_name(&self) -> String {
+        self.db.name().to_string()
+    }
+
+    pub fn secret_key_name(&self) -> String {
+        self.secret_key.clone()
+    }
+
     pub fn signup(&mut self, username: &str, email: &str, password: &str) -> Result<User, DatabaseError> {
         // Check if user already exists
         let check_query = format!(

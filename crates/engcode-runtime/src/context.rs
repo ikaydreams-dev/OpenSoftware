@@ -10,6 +10,8 @@ pub struct ExecutionContext {
     pub variables: HashMap<String, Value>,
     web_server: Option<WebServer>,
     html_page: Option<HtmlPage>,
+    layouts: HashMap<String, String>,
+    css_framework: Option<String>,
     functions: HashMap<String, (Vec<String>, Vec<Statement>)>, // name -> (params, body)
     auth_system: Option<AuthSystem>,
 }
@@ -22,6 +24,8 @@ impl ExecutionContext {
             variables: HashMap::new(),
             web_server: None,
             html_page: None,
+            layouts: HashMap::new(),
+            css_framework: None,
             functions: HashMap::new(),
             auth_system: None,
         }
@@ -82,6 +86,24 @@ impl ExecutionContext {
         self.html_page.take()
     }
 
+    // Layout management
+    pub fn store_layout(&mut self, name: String, html: String) {
+        self.layouts.insert(name, html);
+    }
+
+    pub fn get_layout(&self, name: &str) -> Option<&String> {
+        self.layouts.get(name)
+    }
+
+    // CSS framework management
+    pub fn set_css_framework(&mut self, framework: Option<String>) {
+        self.css_framework = framework;
+    }
+
+    pub fn css_framework(&self) -> Option<String> {
+        self.css_framework.clone()
+    }
+
     // Function management
     pub fn define_function(&mut self, name: String, parameters: Vec<String>, body: Vec<Statement>) {
         self.functions.insert(name, (parameters, body));
@@ -104,5 +126,14 @@ impl ExecutionContext {
 
     pub fn get_auth_system_mut(&mut self) -> Option<&mut AuthSystem> {
         self.auth_system.as_mut()
+    }
+
+    // Snapshots used by script-level route handlers
+    pub fn snapshot_functions(&self) -> HashMap<String, (Vec<String>, Vec<Statement>)> {
+        self.functions.clone()
+    }
+
+    pub fn snapshot_auth(&self) -> Option<(String, String)> {
+        self.auth_system.as_ref().map(|a| (a.database_name(), a.secret_key_name()))
     }
 }

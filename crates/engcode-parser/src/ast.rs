@@ -18,6 +18,10 @@ pub enum Statement {
         collection: String,
         data: Vec<(String, Expression)>, // key-value pairs
     },
+    InsertRaw {
+        collection: String,
+        value: Expression,
+    },
     Select {
         collection: String,
         fields: Vec<String>, // empty means all
@@ -39,6 +43,7 @@ pub enum Statement {
         method: String, // "get", "post", "put", "delete"
         path: String,
         response: Expression,
+        status_code: Option<u16>,
     },
     AddDataRoute {
         method: String,
@@ -48,9 +53,39 @@ pub enum Statement {
     StartServer {
         duration_seconds: Option<f64>,
     },
+    // Web Enhancement Statements
+    AddHandler {
+        method: String,
+        path: String,
+        body_var: String,
+        body: Vec<Statement>,
+        status_code: Option<u16>,
+    },
+    AddMiddleware {
+        middleware_type: String,
+    },
     // HTML/UI Statements
     CreatePage {
         name: String,
+        title: Option<String>,
+        layout: Option<String>,
+    },
+    AddCss {
+        framework: String,
+    },
+    CreateLayout {
+        name: String,
+    },
+    RenderLayout {
+        name: String,
+    },
+    AddUploadRoute {
+        path: String,
+        directory: String,
+    },
+    AddUIComponent {
+        component: String,  // "toast", "alert", "spinner", "modal"
+        text: String,
         title: Option<String>,
     },
     AddElement {

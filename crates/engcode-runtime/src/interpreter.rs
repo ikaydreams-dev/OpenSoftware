@@ -2,7 +2,7 @@ use colored::*;
 use engcode_parser::{Program, Statement, Expression};
 use crate::context::ExecutionContext;
 use crate::error::RuntimeError;
-use crate::value::Value;
+use crate::value::{Value, value_from_json, value_to_json};
 
 pub struct Interpreter {
     context: ExecutionContext,
@@ -41,6 +41,9 @@ impl Interpreter {
             Statement::Insert { collection, data } => {
                 self.execute_insert(collection, data)
             }
+            Statement::InsertRaw { collection, value } => {
+                self.execute_insert_raw(collection, value)
+            }
             Statement::Select { collection, fields, condition } => {
                 self.execute_select(collection, fields, condition)
             }
@@ -53,18 +56,39 @@ impl Interpreter {
             Statement::CreateServer { port } => {
                 self.execute_create_server(port)
             }
-            Statement::AddRoute { method, path, response } => {
-                self.execute_add_route(method, path, response)
+            Statement::AddRoute { method, path, response, status_code } => {
+                self.execute_add_route(method, path, response, status_code)
             }
             Statement::AddDataRoute { method, path, collection } => {
                 self.execute_add_data_route(method, path, collection)
+            }
+            Statement::AddMiddleware { middleware_type } => {
+                self.execute_add_middleware(middleware_type)
+            }
+            Statement::AddHandler { method, path, body_var, body, status_code } => {
+                self.execute_add_handler(method, path, body_var, body, status_code)
             }
             Statement::StartServer { duration_seconds } => {
                 self.execute_start_server(duration_seconds)
             }
             // HTML statements
-            Statement::CreatePage { name, title } => {
-                self.execute_create_page(name, title)
+            Statement::CreatePage { name, title, layout } => {
+                self.execute_create_page(name, title, layout)
+            }
+            Statement::AddCss { framework } => {
+                self.execute_add_css(framework)
+            }
+            Statement::CreateLayout { name } => {
+                self.execute_create_layout(name)
+            }
+            Statement::RenderLayout { name } => {
+                self.execute_render_layout(name)
+            }
+            Statement::AddUploadRoute { path, directory } => {
+                self.execute_add_upload_route(path, directory)
+            }
+            Statement::AddUIComponent { component, text, title } => {
+                self.execute_add_ui_component(component, text, title)
             }
             Statement::AddButton { text, properties } => {
                 self.execute_add_button(text, properties)
@@ -329,6 +353,25 @@ impl Interpreter {
             .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
 
         engcode_stdlib::database::insert_data(db, &collection, &json_data)?;
+
+        println!("  {} Inserted into {}", "✓".green(), collection.cyan());
+        Ok(())
+    }
+
+    fn execute_insert_raw(
+        &mut self,
+        collection: String,
+        value: Expression,
+    ) -> Result<(), RuntimeError> {
+        let evaluated = self.evaluate_expression(value)?;
+        let json = value_to_json(&evaluated);
+
+        let db_name = self.context.current_database()
+            .ok_or(RuntimeError::NoDatabaseContext)?;
+        let db = self.context.get_database_mut(&db_name)
+            .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
+
+        engcode_stdlib::database::insert_data(db, &collection, &json.to_string())?;
 
         println!("  {} Inserted into {}", "✓".green(), collection.cyan());
         Ok(())
@@ -610,7 +653,9 @@ impl Interpreter {
     }
 
     fn execute_create_server(&mut self, port: u16) -> Result<(), RuntimeError> {
-        let server = engcode_stdlib::webserver::create_server(port).serve_html_pages();
+        let server = engcode_stdlib::webserver::create_server(port)
+            .serve_html_pages()
+            .serve_static_files();
         self.context.set_web_server(server);
 
         println!("{} Created web server on port {}", "✓".green().bold(), port.to_string().cyan());
@@ -623,12 +668,13 @@ impl Interpreter {
         method: String,
         path: String,
         response_expr: Expression,
+        status_code: Option<u16>,
     ) -> Result<(), RuntimeError> {
         let response_value = self.evaluate_expression(response_expr)?;
         let response_str = format!("{}", response_value);
 
         if let Some(server) = self.context.get_web_server_mut() {
-            server.add_route(&method, &path, response_str);
+            server.add_route(&method, &path, response_str, status_code);
             println!("  {} Added route {} {}", "→".cyan(), method.yellow(), path.cyan());
         } else {
             return Err(RuntimeError::TypeError(
@@ -637,6 +683,99 @@ impl Interpreter {
         }
 
         Ok(())
+    }
+
+    fn execute_add_middleware(&mut self, middleware_type: String) -> Result<(), RuntimeError> {
+        if let Some(server) = self.context.get_web_server_mut() {
+            server.add_middleware(&middleware_type);
+            println!("  {} Added middleware: {}", "→".cyan(), middleware_type.yellow());
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No web server created. Create a server first.".to_string(),
+            ))
+        }
+    }
+
+    // Registers a script-level route. When a request arrives, a fresh
+    // interpreter is created from the program's current state and the
+    // handler statements are executed. The value of the last `show`
+    // statement becomes the JSON response.
+    fn execute_add_handler(
+        &mut self,
+        method: String,
+        path: String,
+        body_var: String,
+        statements: Vec<Statement>,
+        status_code: Option<u16>,
+    ) -> Result<(), RuntimeError> {
+        use std::sync::Arc;
+
+        let db_name = self.context.current_database();
+        let functions = self.context.snapshot_functions();
+        let variables = self.context.variables.clone();
+        let auth = self.context.snapshot_auth();
+        let statements = Arc::new(statements);
+
+        let func: Arc<engcode_stdlib::webserver::RouteFunc> = Arc::new(
+            move |body: Option<serde_json::Value>| -> Result<(serde_json::Value, u16), String> {
+                let mut ctx = crate::context::ExecutionContext::new();
+                if let Some(db_name) = &db_name {
+                    let db = engcode_stdlib::database::create_database(db_name)
+                        .map_err(|e| e.to_string())?;
+                    ctx.add_database(db_name.clone(), db);
+                    ctx.set_current_database(Some(db_name.clone()));
+                }
+                for (name, (params, body)) in &functions {
+                    ctx.define_function(name.clone(), params.clone(), body.clone());
+                }
+                ctx.variables = variables.clone();
+                if let Some(auth_data) = &auth {
+                    if let Ok(db) = engcode_stdlib::database::create_database(&auth_data.0) {
+                        ctx.ensure_auth_system(db, auth_data.1.clone());
+                    }
+                }
+
+                if let Some(b) = body {
+                    if !body_var.is_empty() {
+                        ctx.set_variable(body_var.clone(), value_from_json(&b));
+                    }
+                }
+
+                let mut interp = Interpreter { context: ctx };
+                let mut response = serde_json::Value::Null;
+                for stmt in statements.iter() {
+                    match stmt {
+                        Statement::Show { message } => {
+                            let v = interp.evaluate_expression(message.clone())
+                                .map_err(|e| e.to_string())?;
+                            println!("{}", v);
+                            response = value_to_json(&v);
+                        }
+                        other => {
+                            interp.execute_statement(other.clone())
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+
+                if let Some(r) = interp.context.variables.get("__response__") {
+                    response = value_to_json(r);
+                }
+
+                Ok((response, status_code.unwrap_or(0)))
+            },
+        );
+
+        if let Some(server) = self.context.get_web_server_mut() {
+            server.add_script_route(&method, &path, status_code, func);
+            println!("  {} Added handler route {} {}", "→".cyan(), method.yellow(), path.cyan());
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No web server created. Create a server first.".to_string(),
+            ))
+        }
     }
 
     fn execute_start_server(&mut self, duration_seconds: Option<f64>) -> Result<(), RuntimeError> {
@@ -653,15 +792,101 @@ impl Interpreter {
     }
 
     // HTML execution methods
-    fn execute_create_page(&mut self, name: String, title: Option<String>) -> Result<(), RuntimeError> {
+    fn execute_create_page(&mut self, name: String, title: Option<String>, layout: Option<String>) -> Result<(), RuntimeError> {
         use engcode_stdlib::HtmlPage;
 
-        let page = HtmlPage::new(name.clone(), title.clone());
+        let mut page = HtmlPage::new(name.clone(), title.clone());
+        page.layout = layout.clone();
+        page.css_framework = self.context.css_framework();
         self.context.set_html_page(page);
 
         let title_display = title.unwrap_or_else(|| name.clone());
-        println!("{} Created page \"{}\" with title \"{}\"", "✓".green().bold(), name.cyan(), title_display);
+        let layout_display = layout.unwrap_or_else(|| "none".to_string());
+        println!("{} Created page \"{}\" with title \"{}\" and layout \"{}\"", "✓".green().bold(), name.cyan(), title_display, layout_display);
         Ok(())
+    }
+
+    fn execute_add_css(&mut self, framework: String) -> Result<(), RuntimeError> {
+        if let Some(page) = self.context.get_html_page_mut() {
+            page.css_framework = Some(framework.clone());
+        } else {
+            self.context.set_css_framework(Some(framework.clone()));
+        }
+        println!("  {} Added CSS framework: {}", "→".cyan(), framework.cyan());
+        Ok(())
+    }
+
+    fn execute_create_layout(&mut self, name: String) -> Result<(), RuntimeError> {
+        use engcode_stdlib::{HtmlElement, HtmlPage};
+
+        let mut page = HtmlPage::new(format!("layout:{}", name), Some(name.clone()));
+        page.css_framework = self.context.css_framework();
+        page.add_element(HtmlElement::Placeholder {
+            marker: "{{body}}".to_string(),
+        });
+        self.context.set_html_page(page);
+        println!("  {} Created layout \"{}\" (add elements then 'render layout')", "→".cyan(), name.cyan());
+        Ok(())
+    }
+
+    fn execute_render_layout(&mut self, name: String) -> Result<(), RuntimeError> {
+        use std::fs;
+
+        if let Some(page) = self.context.take_html_page() {
+            let html = page.render();
+            self.context.store_layout(name.clone(), html.clone());
+
+            let _ = fs::create_dir_all("public/layouts");
+            let filename = format!("public/layouts/{}.html", name);
+            if let Err(e) = fs::write(&filename, &html) {
+                return Err(RuntimeError::TypeError(format!("Failed to save layout: {}", e)));
+            }
+            println!("  {} Rendered layout to {}", "✓".green().bold(), filename.cyan());
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No layout created. Use 'create a layout called X' first.".to_string(),
+            ))
+        }
+    }
+
+    fn execute_add_upload_route(&mut self, path: String, directory: String) -> Result<(), RuntimeError> {
+        let server = self.context.take_web_server();
+        let mut server = match server {
+            Some(s) => s,
+            None => {
+                return Err(RuntimeError::TypeError(
+                    "No web server created. Use 'create a web server on port X' first.".to_string(),
+                ))
+            }
+        };
+        server.add_upload_route(&path, &directory);
+        self.context.set_web_server(server);
+        println!("  {} Added upload route {} to {}", "→".cyan(), path.cyan(), directory.magenta());
+        Ok(())
+    }
+
+    fn execute_add_ui_component(&mut self, component: String, text: String, title: Option<String>) -> Result<(), RuntimeError> {
+        use engcode_stdlib::HtmlElement;
+
+        if let Some(page) = self.context.get_html_page_mut() {
+            match component.as_str() {
+                "toast" => page.add_element(HtmlElement::Toast { text: text.clone() }),
+                "alert" => page.add_element(HtmlElement::Alert { text: text.clone() }),
+                "spinner" => page.add_element(HtmlElement::Spinner),
+                "modal" => page.add_element(HtmlElement::Modal {
+                    title: title.unwrap_or_default().clone(),
+                    content: text.clone(),
+                }),
+                _ => {}
+            }
+            println!("  {} Added {} component", "→".cyan(), component.cyan());
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError(
+                "No page created. Use 'create a page called X' first.".to_string(),
+            ))
+        }
     }
 
     fn execute_add_button(&mut self, text: String, _properties: Vec<(String, Expression)>) -> Result<(), RuntimeError> {
@@ -766,8 +991,34 @@ impl Interpreter {
             }
 
             // Save to file in public directory
+            let mut filename = format!("public/{}.html", page_name);
+
+            if let Some(layout_name) = page_with_styles.layout.clone() {
+                // Wrap page content inside the layout's {{body}} placeholder
+                match self.context.get_layout(&layout_name) {
+                    Some(layout_html) => {
+                        let page_html = page_with_styles.render();
+                        let body_content = extract_body_content(&page_html);
+                        let combined = layout_html.replace("{{body}}", &body_content);
+                        let _ = std::fs::create_dir_all("public");
+                        if let Err(e) = std::fs::write(&filename, &combined) {
+                            return Err(RuntimeError::TypeError(
+                                format!("Failed to save HTML file: {}", e),
+                            ));
+                        }
+                        println!("\n{} Rendered page {} with layout \"{}\" to {}", "✓".green().bold(), page_name.cyan(), layout_name.cyan(), filename.cyan());
+                        println!("  {} Open in browser: file://{}/{}", "→".bright_black(), std::env::current_dir().unwrap().display(), filename);
+                        return Ok(());
+                    }
+                    None => {
+                        println!("  {} Layout \"{}\" not found; rendering page standalone", "⚠".yellow(), layout_name);
+                    }
+                }
+            }
+
             match page_with_styles.save_to_file("public") {
-                Ok(filename) => {
+                Ok(f) => {
+                    filename = f;
                     println!("\n{} Rendered page to {}", "✓".green().bold(), filename.cyan());
                     println!("  {} Open in browser: file://{}/{}", "→".bright_black(), std::env::current_dir().unwrap().display(), filename);
                     Ok(())
@@ -1505,6 +1756,13 @@ impl Interpreter {
 
         Ok(result)
     }
+}
+
+// Extracts the inner HTML of a page's <body> element for layout composition.
+fn extract_body_content(html: &str) -> String {
+    let start = html.find("<body>").map(|i| i + 6).unwrap_or(0);
+    let end = html.find("</body>").unwrap_or(html.len());
+    html[start..end].to_string()
 }
 
 #[cfg(test)]

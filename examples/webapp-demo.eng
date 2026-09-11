@@ -1,0 +1,38 @@
+create database called "webapp"
+create collections in it
+users
+products
+
+insert into users with name is "sarah" and role is "admin" and age is 30
+insert into users with name is "jake" and role is "user" and age is 24
+insert into users with name is "maya" and role is "editor" and age is 28
+insert into products with title is "Laptop" and price is 1299
+insert into products with title is "Mouse" and price is 25
+insert into products with title is "Keyboard" and price is 89
+
+create a web server on port 4000
+
+add middleware logging
+add middleware cors
+
+add route get "/api/users" returning rows from users
+add route post "/api/users" returning rows from users
+add route put "/api/users" returning rows from users
+add route delete "/api/users" returning rows from users
+add route get "/api/products" returning rows from products
+add route post "/api/products" returning rows from products
+
+add route get "/health" returning "system running" returning status 200
+add route get "/notfound" returning "missing" returning status 404
+
+handle post "/api/submit" with body as data
+  insert data into users
+  show data
+end
+
+create a page called "users" with title "Users"
+add heading level 1 with text "User Directory"
+add paragraph with text "Each user in the system:"
+render page "users"
+
+start the server for 8 seconds
