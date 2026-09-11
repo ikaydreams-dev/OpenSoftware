@@ -209,6 +209,9 @@ pub enum Token {
     Toast,
     Loading,
     Spinner,
+    Tabs,
+    Accordion,
+    Items,
 
     // Control Flow Keywords
     If,
@@ -485,6 +488,10 @@ impl Token {
             "toast" => Token::Toast,
             "loading" => Token::Loading,
             "spinner" => Token::Spinner,
+            "tabs" => Token::Tabs,
+            "tab" => Token::Tabs,
+            "accordion" => Token::Accordion,
+            "items" => Token::Items,
             // Control Flow Keywords
             "if" => Token::If,
             "then" => Token::Then,

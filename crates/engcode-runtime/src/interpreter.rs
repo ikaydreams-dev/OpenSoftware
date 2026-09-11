@@ -39,6 +39,9 @@ impl Interpreter {
             Statement::Assignment { variable, value } => {
                 self.execute_assignment(variable, value)
             }
+            Statement::SetCookie { name, value } => {
+                self.execute_set_cookie(name, value)
+            }
             Statement::Insert { collection, data } => {
                 self.execute_insert(collection, data)
             }
@@ -88,8 +91,8 @@ impl Interpreter {
             Statement::AddUploadRoute { path, directory } => {
                 self.execute_add_upload_route(path, directory)
             }
-            Statement::AddUIComponent { component, text, title } => {
-                self.execute_add_ui_component(component, text, title)
+            Statement::AddUIComponent { component, text, title, items } => {
+                self.execute_add_ui_component(component, text, title, items)
             }
             Statement::AddButton { text, properties } => {
                 self.execute_add_button(text, properties)
@@ -230,6 +233,27 @@ impl Interpreter {
         self.context.set_variable(variable.clone(), value.clone());
 
         println!("  {} Set {} = {}", "→".bright_black(), variable.cyan(), value);
+        Ok(())
+    }
+
+    fn execute_set_cookie(&mut self, name: String, expr: Expression) -> Result<(), RuntimeError> {
+        let value = self.evaluate_expression(expr)?;
+        let value_str = match value {
+            Value::String(s) => s,
+            other => other.to_string(),
+        };
+
+        let cookie_value = value_str.replace(',', "%2C").replace(';', "%3B");
+        let cookie_str = format!("{}={}; Path=/", name, cookie_value);
+
+        let mut cookies = match self.context.get_variable("__set_cookie__") {
+            Some(Value::Array(items)) => items.clone(),
+            _ => Vec::new(),
+        };
+        cookies.push(Value::String(cookie_str.clone()));
+        self.context.set_variable("__set_cookie__".to_string(), Value::Array(cookies));
+
+        println!("  {} Set cookie {}", "→".bright_black(), cookie_str.cyan());
         Ok(())
     }
 
@@ -722,7 +746,7 @@ impl Interpreter {
         let statements = Arc::new(statements);
 
         let func: Arc<engcode_stdlib::webserver::RouteFunc> = Arc::new(
-            move |body: Option<serde_json::Value>| -> Result<(serde_json::Value, u16), String> {
+            move |body: Option<serde_json::Value>, headers: Vec<(String, String)>| -> Result<(serde_json::Value, u16, Vec<(String, String)>), String> {
                 let mut ctx = crate::context::ExecutionContext::new();
                 if let Some(db_name) = &db_name {
                     let db = engcode_stdlib::database::create_database(db_name)
@@ -734,6 +758,23 @@ impl Interpreter {
                     ctx.define_function(name.clone(), params.clone(), body.clone());
                 }
                 ctx.variables = variables.clone();
+
+                // Expose request headers and parsed cookies to the handler.
+                let mut header_map = std::collections::HashMap::new();
+                let mut cookie_map = std::collections::HashMap::new();
+                for (name, value) in &headers {
+                    header_map.insert(name.clone(), Value::String(value.clone()));
+                    if name.eq_ignore_ascii_case("cookie") {
+                        for pair in value.split(';') {
+                            if let Some((n, v)) = pair.trim().split_once('=') {
+                                cookie_map.insert(n.to_string(), Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+                ctx.set_variable("headers".to_string(), Value::Object(header_map));
+                ctx.set_variable("cookies".to_string(), Value::Object(cookie_map));
+
                 if let Some(auth_data) = &auth {
                     if let Ok(db) = engcode_stdlib::database::create_database(&auth_data.0) {
                         ctx.ensure_auth_system(db, auth_data.1.clone());
@@ -762,7 +803,7 @@ impl Interpreter {
                                 Ok(()) => {}
                                 Err(RuntimeError::ValidationFailed(messages)) => {
                                     response = serde_json::json!({ "error": messages, "status": 422 });
-                                    return Ok((response, 422));
+                                    return Ok((response, 422, Vec::new()));
                                 }
                                 Err(e) => return Err(e.to_string()),
                             }
@@ -778,7 +819,17 @@ impl Interpreter {
                     response = value_to_json(r);
                 }
 
-                Ok((response, status_code.unwrap_or(0)))
+                // Collect any cookies the handler set into Set-Cookie headers.
+                let mut set_cookie_headers: Vec<(String, String)> = Vec::new();
+                if let Some(Value::Array(items)) = interp.context.variables.get("__set_cookie__") {
+                    for item in items {
+                        if let Value::String(s) = item {
+                            set_cookie_headers.push(("Set-Cookie".to_string(), s.clone()));
+                        }
+                    }
+                }
+
+                Ok((response, status_code.unwrap_or(0), set_cookie_headers))
             },
         );
 
@@ -881,18 +932,39 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_add_ui_component(&mut self, component: String, text: String, title: Option<String>) -> Result<(), RuntimeError> {
+    fn execute_add_ui_component(&mut self, component: String, text: String, title: Option<String>, items: Vec<(String, String)>) -> Result<(), RuntimeError> {
         use engcode_stdlib::HtmlElement;
 
         if let Some(page) = self.context.get_html_page_mut() {
+            let mut children: Vec<HtmlElement> = Vec::new();
             match component.as_str() {
                 "toast" => page.add_element(HtmlElement::Toast { text: text.clone() }),
                 "alert" => page.add_element(HtmlElement::Alert { text: text.clone() }),
                 "spinner" => page.add_element(HtmlElement::Spinner),
                 "modal" => page.add_element(HtmlElement::Modal {
-                    title: title.unwrap_or_default().clone(),
+                    title: title.unwrap_or_default(),
                     content: text.clone(),
                 }),
+                "tabs" => page.add_element(HtmlElement::TabSet {
+                    tabs: items.clone(),
+                }),
+                "accordion" => page.add_element(HtmlElement::Accordion {
+                    items: items.clone(),
+                }),
+                "container" => page.add_element(HtmlElement::Container {
+                    children: Vec::new(),
+                }),
+                "grid" => page.add_element(HtmlElement::Grid {
+                    children: Vec::new(),
+                }),
+                "row" => {
+                    children.push(HtmlElement::Div {
+                        id: None,
+                        class: Some("engc-row".to_string()),
+                        children: Vec::new(),
+                    });
+                    page.add_element(HtmlElement::Container { children });
+                }
                 _ => {}
             }
             println!("  {} Added {} component", "→".cyan(), component.cyan());

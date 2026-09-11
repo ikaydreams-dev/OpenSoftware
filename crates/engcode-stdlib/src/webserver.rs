@@ -1,7 +1,7 @@
     use axum::{
     body::Bytes,
     extract::Query,
-    http::{header, Method, Request},
+    http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
@@ -16,9 +16,10 @@ use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 use crate::database::Database;
 
-// A script-level route: body is passed in as parsed JSON (or None), the function
-// returns the JSON response plus the HTTP status code.
-pub type RouteFunc = dyn Fn(Option<Value>) -> Result<(Value, u16), String> + Send + Sync + 'static;
+// A script-level route: body is passed in as parsed JSON (or None), along with the
+// request headers (for cookies/sessions). The function returns the JSON response,
+// the HTTP status code, and any response headers to set (e.g. Set-Cookie).
+pub type RouteFunc = dyn Fn(Option<Value>, Vec<(String, String)>) -> Result<(Value, u16, Vec<(String, String)>), String> + Send + Sync + 'static;
 
 pub struct WebServer {
     router: Router,
@@ -103,109 +104,65 @@ impl WebServer {
         let default_status = status.unwrap_or(200);
         let route_path = path.to_string();
 
-        match method.to_lowercase().as_str() {
-            "get" => {
-                let handler = {
-                    let func = func.clone();
-                    move |body: Bytes| {
-                        let func = func.clone();
-                        async move {
-                            let body_value: Option<Value> = if body.is_empty() {
-                                None
-                            } else {
-                                serde_json::from_slice(&body).ok()
-                            };
-                            match func(body_value) {
-                                Ok((value, code)) => {
-                                    let code = if code == 0 { default_status } else { code };
-                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
-                                }
-                                Err(e) => (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(json!({ "error": e, "status": 500 })),
-                                ).into_response(),
-                            }
+        let build_handler = || {
+            let func = func.clone();
+            let default_status = default_status;
+            move |headers: HeaderMap, body: Bytes| {
+                let func = func.clone();
+                async move {
+                    // Convert request headers into (name, value) pairs.
+                    let mut header_vec: Vec<(String, String)> = Vec::new();
+                    for (name, value) in headers.iter() {
+                        if let Ok(v) = value.to_str() {
+                            header_vec.push((name.as_str().to_string(), v.to_string()));
                         }
                     }
-                };
+
+                    let body_value: Option<Value> = if body.is_empty() {
+                        None
+                    } else {
+                        serde_json::from_slice(&body).ok()
+                    };
+
+                    match func(body_value, header_vec) {
+                        Ok((value, code, response_headers)) => {
+                            let code = if code == 0 { default_status } else { code };
+                            let mut response = (
+                                StatusCode::from_u16(code).unwrap_or(StatusCode::OK),
+                                Json(value),
+                            ).into_response();
+                            for (name, val) in response_headers {
+                                response.headers_mut().append(
+                                    HeaderName::from_bytes(name.as_bytes()).unwrap_or(header::SET_COOKIE),
+                                    val.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+                                );
+                            }
+                            response
+                        }
+                        Err(e) => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": e, "status": 500 })),
+                        ).into_response(),
+                    }
+                }
+            }
+        };
+
+        match method.to_lowercase().as_str() {
+            "get" => {
+                let handler = build_handler();
                 self.router = self.router.clone().route(&route_path, get(handler));
             }
             "post" => {
-                let handler = {
-                    let func = func.clone();
-                    move |body: Bytes| {
-                        let func = func.clone();
-                        async move {
-                            let body_value: Option<Value> = if body.is_empty() {
-                                None
-                            } else {
-                                serde_json::from_slice(&body).ok()
-                            };
-                            match func(body_value) {
-                                Ok((value, code)) => {
-                                    let code = if code == 0 { default_status } else { code };
-                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
-                                }
-                                Err(e) => (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(json!({ "error": e, "status": 500 })),
-                                ).into_response(),
-                            }
-                        }
-                    }
-                };
+                let handler = build_handler();
                 self.router = self.router.clone().route(&route_path, post(handler));
             }
             "put" => {
-                let handler = {
-                    let func = func.clone();
-                    move |body: Bytes| {
-                        let func = func.clone();
-                        async move {
-                            let body_value: Option<Value> = if body.is_empty() {
-                                None
-                            } else {
-                                serde_json::from_slice(&body).ok()
-                            };
-                            match func(body_value) {
-                                Ok((value, code)) => {
-                                    let code = if code == 0 { default_status } else { code };
-                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
-                                }
-                                Err(e) => (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(json!({ "error": e, "status": 500 })),
-                                ).into_response(),
-                            }
-                        }
-                    }
-                };
+                let handler = build_handler();
                 self.router = self.router.clone().route(&route_path, put(handler));
             }
             "delete" => {
-                let handler = {
-                    let func = func.clone();
-                    move |body: Bytes| {
-                        let func = func.clone();
-                        async move {
-                            let body_value: Option<Value> = if body.is_empty() {
-                                None
-                            } else {
-                                serde_json::from_slice(&body).ok()
-                            };
-                            match func(body_value) {
-                                Ok((value, code)) => {
-                                    let code = if code == 0 { default_status } else { code };
-                                    (StatusCode::from_u16(code).unwrap_or(StatusCode::OK), Json(value)).into_response()
-                                }
-                                Err(e) => (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(json!({ "error": e, "status": 500 })),
-                                ).into_response(),
-                            }
-                        }
-                    }
-                };
+                let handler = build_handler();
                 self.router = self.router.clone().route(&route_path, delete(handler));
             }
             _ => {}

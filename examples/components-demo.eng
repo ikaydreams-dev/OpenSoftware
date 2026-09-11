@@ -1,0 +1,12 @@
+add css tailwind
+
+create page "features" with title "Components"
+add heading level 1 with text "Components demo"
+add tabs with "Overview: This is the overview tab." and "Details: Here are the details." and "Settings: Tweak your settings here."
+add heading level 2 with text "FAQ"
+add accordion with "What is this? A demo page." and "How do I use it? Read the docs."
+add heading level 2 with text "Layout grid"
+add grid
+add container
+
+render page "features"

@@ -57,7 +57,9 @@ impl Parser {
                     Some(Token::Identifier(name)) if name == "css" => self.parse_add_css(),
                     Some(Token::Upload) => self.parse_add_upload_route(),
                     Some(Token::Toast) | Some(Token::Alert) | Some(Token::Spinner)
-                    | Some(Token::Loading) | Some(Token::Modal) => {
+                    | Some(Token::Loading) | Some(Token::Modal)
+                    | Some(Token::Tabs) | Some(Token::Accordion)
+                    | Some(Token::Container) | Some(Token::Grid) => {
                         self.parse_add_ui_component()
                     }
                     _ => self.parse_insert(), // Default to insert for data operations
@@ -652,6 +654,11 @@ impl Parser {
         // Consume: set/let/make/store/save
         self.advance();
 
+        // `set cookie "name" to "value"` is a dedicated statement.
+        if matches!(&self.current_token(), Token::Identifier(name) if name == "cookie") {
+            return self.parse_set_cookie();
+        }
+
         // Get variable name (allow keywords as variable names)
         let variable = self.token_as_identifier(self.current_token())
             .ok_or_else(|| "Expected variable name".to_string())?;
@@ -666,6 +673,27 @@ impl Parser {
         let value = self.parse_expression()?;
 
         Ok(Statement::Assignment { variable, value })
+    }
+
+    fn parse_set_cookie(&mut self) -> Result<Statement, String> {
+        // At start, current token is "cookie".
+        self.advance();
+
+        let name = match self.current_token() {
+            Token::String(s) => s.clone(),
+            Token::Identifier(s) => s.clone(),
+            _ => return Err("Expected cookie name after 'set cookie'".to_string()),
+        };
+        self.advance();
+
+        // Consume optional: to/is/=
+        if matches!(self.current_token(), Token::To | Token::Is | Token::Equals) {
+            self.advance();
+        }
+
+        let value = self.parse_expression()?;
+
+        Ok(Statement::SetCookie { name, value })
     }
 
     fn parse_expression(&mut self) -> Result<Expression, String> {
@@ -1413,15 +1441,46 @@ impl Parser {
             Token::Alert => "alert".to_string(),
             Token::Spinner | Token::Loading => "spinner".to_string(),
             Token::Modal => "modal".to_string(),
-            _ => return Err("Expected UI component (toast, alert, spinner, modal)".to_string()),
+            Token::Tabs => "tabs".to_string(),
+            Token::Accordion => "accordion".to_string(),
+            Token::Container => "container".to_string(),
+            Token::Grid => "grid".to_string(),
+            _ => return Err("Expected UI component (toast, alert, spinner, modal, tabs, accordion, container, grid)".to_string()),
         };
         self.advance();
 
         // For spinner, no text needed
         let mut text = String::new();
         let mut title = None;
+        let mut items: Vec<(String, String)> = Vec::new();
 
-        if component == "spinner" || component == "modal" {
+        if component == "tabs" || component == "accordion" {
+            // add tabs with "Label One: Content one" and "Label Two: Content two"
+            if matches!(self.current_token(), Token::With) {
+                self.advance();
+            }
+            if matches!(self.current_token(), Token::Items) {
+                self.advance();
+            }
+            while let Token::String(s) = self.current_token() {
+                let pair = s.clone();
+                self.advance();
+                match pair.split_once(':') {
+                    Some((label, content)) => {
+                        items.push((label.trim().to_string(), content.trim().to_string()));
+                    }
+                    None => {
+                        // Treat as a bare label with empty content (tab label only).
+                        items.push((pair.trim().to_string(), String::new()));
+                    }
+                }
+                if matches!(self.current_token(), Token::And) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        } else if component == "spinner" || component == "modal" {
             // modal: add modal with title "..." and content "..."
             //       or add modal "message"
             if matches!(self.current_token(), Token::With) {
@@ -1464,7 +1523,7 @@ impl Parser {
             }
         }
 
-        Ok(Statement::AddUIComponent { component, text, title })
+        Ok(Statement::AddUIComponent { component, text, title, items })
     }
 
     fn parse_render_page(&mut self) -> Result<Statement, String> {

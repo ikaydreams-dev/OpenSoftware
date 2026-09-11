@@ -1,0 +1,17 @@
+create database called "sessionsdemo"
+create collections in it
+users
+sessions
+
+create server on port 4004
+
+handle post "/api/set-visit" with body as data
+    set cookie "last_visit" to "true"
+    show "cookie set"
+end
+
+handle get "/api/read-cookie" with body as data
+    show cookies
+end
+
+start server

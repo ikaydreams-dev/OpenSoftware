@@ -14,6 +14,10 @@ pub enum Statement {
         variable: String,
         value: Expression,
     },
+    SetCookie {
+        name: String,
+        value: Expression,
+    },
     Insert {
         collection: String,
         data: Vec<(String, Expression)>, // key-value pairs
@@ -84,9 +88,10 @@ pub enum Statement {
         directory: String,
     },
     AddUIComponent {
-        component: String,  // "toast", "alert", "spinner", "modal"
+        component: String,  // "toast", "alert", "spinner", "modal", "tabs", "accordion", "container", "grid"
         text: String,
         title: Option<String>,
+        items: Vec<(String, String)>, // (label, content) pairs for tabs/accordion
     },
     AddElement {
         element_type: String, // "div", "button", "form", "input", etc

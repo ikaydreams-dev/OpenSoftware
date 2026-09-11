@@ -64,6 +64,18 @@ pub enum HtmlElement {
         title: String,
         content: String,
     },
+    TabSet {
+        tabs: Vec<(String, String)>, // (label, content)
+    },
+    Accordion {
+        items: Vec<(String, String)>, // (title, content)
+    },
+    Container {
+        children: Vec<HtmlElement>,
+    },
+    Grid {
+        children: Vec<HtmlElement>,
+    },
 }
 
 impl HtmlPage {
@@ -108,22 +120,40 @@ impl HtmlPage {
         }
 
         // Styles
-        if !self.styles.is_empty() {
-            html.push_str("    <style>\n");
-            for (selector, properties) in &self.styles {
-                html.push_str(&format!("        {} {{\n", selector));
-                for (prop, val) in properties {
-                    html.push_str(&format!("            {}: {};\n", prop, val));
-                }
-                html.push_str("        }\n");
-            }
-            html.push_str("    </style>\n");
+        html.push_str("    <style>\n");
+        let base_css = [
+            ".engc-container { max-width: 1200px; margin: 0 auto; padding: 0 16px; }",
+            ".engc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }",
+            ".engc-row { display: flex; flex-wrap: wrap; gap: 16px; }",
+            "@media (max-width: 768px) { .engc-row > * { flex: 1 1 100%; } }",
+            ".engc-tabs { margin-bottom: 16px; }",
+            ".engc-tab-buttons { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid #eee; }",
+            ".engc-tab-button { background: #f5f5f5; border: 1px solid #ddd; border-bottom: none; padding: 8px 16px; cursor: pointer; border-radius: 4px 4px 0 0; }",
+            ".engc-tab-button-active { background: #007bff; color: #fff; }",
+            ".engc-tab-panel { padding: 16px; border: 1px solid #ddd; border-top: none; }",
+            ".engc-accordion-item { border: 1px solid #eee; margin-bottom: 6px; border-radius: 4px; }",
+            ".engc-accordion-title { width: 100%; text-align: left; background: #f9f9f9; padding: 12px 16px; border: none; cursor: pointer; font-size: 15px; }",
+            ".engc-accordion-content { display: none; padding: 12px 16px; }",
+            ".engc-accordion-item.engc-open .engc-accordion-content { display: block; }",
+        ];
+        for rule in base_css {
+            html.push_str(&format!("        {}\n", rule));
         }
+        for (selector, properties) in &self.styles {
+            html.push_str(&format!("        {} {{\n", selector));
+            for (prop, val) in properties {
+                html.push_str(&format!("            {}: {};\n", prop, val));
+            }
+            html.push_str("        }\n");
+        }
+        html.push_str("    </style>\n");
 
         html.push_str("    <script>\n");
         html.push_str("      function showToast(text) { var t = document.getElementById('engc-toast'); if (t) { t.innerHTML = text; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 3000); } }\n");
         html.push_str("      function showModal(id) { var m = document.getElementById(id); if (m) { m.style.display = 'flex'; } }\n");
         html.push_str("      function hideModal(id) { var m = document.getElementById(id); if (m) { m.style.display = 'none'; } }\n");
+        html.push_str("      function showTab(containerId, idx) { var c = document.getElementById(containerId); if (!c) return; var ps = c.querySelectorAll('.engc-tab-panel'); var bs = c.querySelectorAll('.engc-tab-button'); for (var i = 0; i < ps.length; i++) { ps[i].style.display = (i === idx) ? 'block' : 'none'; } for (var j = 0; j < bs.length; j++) { if (j === idx) { bs[j].classList.add('engc-tab-button-active'); } else { bs[j].classList.remove('engc-tab-button-active'); } } }\n");
+        html.push_str("      function toggleAccordion(btn) { var item = btn.parentElement; item.classList.toggle('engc-open'); }\n");
         html.push_str("    </script>\n");
 
         html.push_str("</head>\n");
@@ -272,6 +302,57 @@ impl HtmlPage {
                 html.push_str(&format!("    <button onclick=\"hideModal('{}')\" style=\"margin-top:12px;\">Close</button>\n", id));
                 html.push_str(&indent);
                 html.push_str("  </div>\n");
+                html.push_str(&indent);
+                html.push_str("</div>\n");
+            }
+            HtmlElement::TabSet { tabs } => {
+                let id = format!("engc-tabs-{}", html.len());
+                html.push_str(&indent);
+                html.push_str(&format!("<div class=\"engc-tabs\" id=\"{}\">\n", id));
+                html.push_str(&indent);
+                html.push_str("  <div class=\"engc-tab-buttons\">\n");
+                for (i, (label, _)) in tabs.iter().enumerate() {
+                    let active = if i == 0 { " engc-tab-button-active" } else { "" };
+                    html.push_str(&format!("    <button class=\"engc-tab-button{}\" onclick=\"showTab('{}', {})\">{}</button>\n", active, id, i, escape_html(label)));
+                }
+                html.push_str(&indent);
+                html.push_str("  </div>\n");
+                for (i, (_, content)) in tabs.iter().enumerate() {
+                    let display = if i == 0 { "block" } else { "none" };
+                    html.push_str(&format!("  <div class=\"engc-tab-panel\" style=\"display:{};\">{}</div>\n", display, escape_html(content)));
+                }
+                html.push_str(&indent);
+                html.push_str("</div>\n");
+            }
+            HtmlElement::Accordion { items } => {
+                html.push_str(&indent);
+                html.push_str("<div class=\"engc-accordion\">\n");
+                for (title, content) in items {
+                    html.push_str(&indent);
+                    html.push_str("  <div class=\"engc-accordion-item\">\n");
+                    html.push_str(&format!("    <button class=\"engc-accordion-title\" onclick=\"toggleAccordion(this)\">{}</button>\n", escape_html(title)));
+                    html.push_str(&format!("    <div class=\"engc-accordion-content\">{}</div>\n", escape_html(content)));
+                    html.push_str(&indent);
+                    html.push_str("  </div>\n");
+                }
+                html.push_str(&indent);
+                html.push_str("</div>\n");
+            }
+            HtmlElement::Container { children } => {
+                html.push_str(&indent);
+                html.push_str("<div class=\"engc-container\">\n");
+                for child in children {
+                    html.push_str(&self.render_element(child, indent_level + 1));
+                }
+                html.push_str(&indent);
+                html.push_str("</div>\n");
+            }
+            HtmlElement::Grid { children } => {
+                html.push_str(&indent);
+                html.push_str("<div class=\"engc-grid\">\n");
+                for child in children {
+                    html.push_str(&self.render_element(child, indent_level + 1));
+                }
                 html.push_str(&indent);
                 html.push_str("</div>\n");
             }
