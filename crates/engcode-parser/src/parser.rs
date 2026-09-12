@@ -104,6 +104,15 @@ impl Parser {
             Token::Logout => self.parse_logout(),
             Token::Test => self.parse_test_block(),
             Token::Assert | Token::Expect => self.parse_assert(),
+            Token::Begin => self.parse_begin_transaction(),
+            Token::Commit => {
+                self.advance();
+                Ok(Statement::CommitTransaction)
+            }
+            Token::Rollback => {
+                self.advance();
+                Ok(Statement::RollbackTransaction)
+            }
             Token::Read => self.parse_read_file(),
             Token::Write => self.parse_write_file(),
             Token::Append => self.parse_append_file(),
@@ -2702,6 +2711,15 @@ impl Parser {
         Ok(Statement::Logout)
     }
 
+    fn parse_begin_transaction(&mut self) -> Result<Statement, String> {
+        self.consume(&Token::Begin)?;
+        // Optional "transaction"
+        if matches!(self.current_token(), Token::Identifier(name) if name == "transaction") {
+            self.advance();
+        }
+        Ok(Statement::BeginTransaction)
+    }
+
     fn parse_test_block(&mut self) -> Result<Statement, String> {
         self.consume(&Token::Test)?;
 
@@ -2920,6 +2938,21 @@ match &program.statements[0] {
             }
             _ => panic!("Expected SetStyle"),
         }
+    }
+
+    #[test]
+    fn test_parse_transaction_statements() {
+        let source = r#"begin transaction
+rollback
+commit"#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        assert_eq!(program.statements.len(), 3);
+        assert!(matches!(program.statements[0], Statement::BeginTransaction));
+        assert!(matches!(program.statements[1], Statement::RollbackTransaction));
+        assert!(matches!(program.statements[2], Statement::CommitTransaction));
     }
 
     #[test]

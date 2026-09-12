@@ -95,6 +95,9 @@ pub enum Statement {
         limit: u64,
         window_secs: u64,
     },
+    BeginTransaction,
+    CommitTransaction,
+    RollbackTransaction,
     AddUIComponent {
         component: String,  // "toast", "alert", "spinner", "modal", "tabs", "accordion", "container", "grid"
         text: String,

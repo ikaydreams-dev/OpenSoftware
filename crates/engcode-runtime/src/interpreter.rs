@@ -98,6 +98,9 @@ impl Interpreter {
             Statement::AddRateLimit { limit, window_secs } => {
                 self.execute_add_rate_limit(limit, window_secs)
             }
+            Statement::BeginTransaction => self.execute_transaction("begin"),
+            Statement::CommitTransaction => self.execute_transaction("commit"),
+            Statement::RollbackTransaction => self.execute_transaction("rollback"),
             Statement::AddUIComponent { component, text, title, items } => {
                 self.execute_add_ui_component(component, text, title, items)
             }
@@ -1101,6 +1104,28 @@ impl Interpreter {
                 "No layout created. Use 'create a layout called X' first.".to_string(),
             ))
         }
+    }
+
+    fn execute_transaction(&mut self, op: &str) -> Result<(), RuntimeError> {
+        let db_name = self.context.current_database()
+            .ok_or(RuntimeError::NoDatabaseContext)?;
+        let db = self.context.get_database_mut(&db_name)
+            .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
+        match op {
+            "begin" => {
+                engcode_stdlib::database::begin_transaction(db)?;
+                println!("  {} Began database transaction", "→".cyan());
+            }
+            "commit" => {
+                engcode_stdlib::database::commit_transaction(db)?;
+                println!("  {} Committed database transaction", "✓".green());
+            }
+            _ => {
+                engcode_stdlib::database::rollback_transaction(db)?;
+                println!("  {} Rolled back database transaction", "→".yellow());
+            }
+        }
+        Ok(())
     }
 
     fn execute_add_rate_limit(&mut self, limit: u64, window_secs: u64) -> Result<(), RuntimeError> {

@@ -192,6 +192,23 @@ impl Database {
         let affected = self.connection.execute(&query, rusqlite::params![id])?;
         Ok(affected > 0)
     }
+
+    // Starts a database transaction. All writes made after this call are
+    // rolled back if rollback() is called, or made permanent on commit().
+    pub fn begin_transaction(&mut self) -> Result<(), DatabaseError> {
+        self.connection.execute("BEGIN", [])?;
+        Ok(())
+    }
+
+    pub fn commit_transaction(&mut self) -> Result<(), DatabaseError> {
+        self.connection.execute("COMMIT", [])?;
+        Ok(())
+    }
+
+    pub fn rollback_transaction(&mut self) -> Result<(), DatabaseError> {
+        self.connection.execute("ROLLBACK", [])?;
+        Ok(())
+    }
 }
 
 // Sanitize table name to prevent SQL injection
@@ -253,6 +270,18 @@ pub fn get_row_by_id(db: &Database, collection: &str, id: i64) -> Result<Option<
 
 pub fn delete_by_id(db: &mut Database, collection: &str, id: i64) -> Result<bool, DatabaseError> {
     db.delete_by_id(collection, id)
+}
+
+pub fn begin_transaction(db: &mut Database) -> Result<(), DatabaseError> {
+    db.begin_transaction()
+}
+
+pub fn commit_transaction(db: &mut Database) -> Result<(), DatabaseError> {
+    db.commit_transaction()
+}
+
+pub fn rollback_transaction(db: &mut Database) -> Result<(), DatabaseError> {
+    db.rollback_transaction()
 }
 
 pub fn query_data(db: &Database, collection: &str, condition: &str) -> Result<Vec<String>, DatabaseError> {
