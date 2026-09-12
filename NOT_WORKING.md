@@ -38,6 +38,7 @@ The following were previously listed as broken but are now tested end-to-end:
 23. **Database joins** — `select all from A join B on A.key is B.key` does an inner join, merging matching rows (prefixed and bare field paths supported)
 24. **`is` as equality** — `where name is "bob"`, `if n is 5 then`, and join conditions now work (previously `Unexpected token: Is`)
 25. **WebSockets** — `add websocket route "/ws"` upgrades to a live WebSocket that echoes messages back
+26. **Rate limiting** — `add rate limit N requests per minute|second|hour`, fixed-window per-IP 429s with `Retry-After` (verified E2E)
 
 ---
 
@@ -216,8 +217,15 @@ add middleware logging    # logs [engcode] METHOD /path -> STATUS (Nms) to stdou
 `add middleware` should appear BEFORE routes. Middleware is applied at server start,
 so routes added after `add middleware` are correctly covered.
 
-### Rate Limiting - NOT IMPLEMENTED
-**Status:** No rate limiting.
+### Rate Limiting - ✅ DONE
+```englishcode
+add rate limit 20 requests per minute
+```
+
+Fixed-window per-IP limiting applied at server start (outermost layer): once an IP
+exceeds the limit within the window, further requests get `429 Too Many Requests`
+with a `Retry-After` header. Units: `per second`, `per minute` (default), `per hour`.
+Verified: limit 1/minute → 1×200 then 4×429.
 
 ---
 

@@ -26,6 +26,7 @@ pub struct WebServer {
     port: u16,
     data_cell: Arc<Mutex<Option<Database>>>,
     middlewares: Vec<String>,
+    rate_limit: Option<(u64, u64)>,
 }
 
 impl WebServer {
@@ -36,6 +37,7 @@ impl WebServer {
             port,
             data_cell: Arc::new(Mutex::new(None)),
             middlewares: Vec::new(),
+            rate_limit: None,
         }
     }
 
@@ -58,6 +60,12 @@ impl WebServer {
             "cors" | "logging" => self.middlewares.push(middleware_type.to_lowercase()),
             _ => {}
         }
+    }
+
+    // Sets a fixed-window per-IP rate limit. Once max_requests are seen from an
+    // IP within window_secs, further requests get a 429 until the window resets.
+    pub fn add_rate_limit(&mut self, max_requests: u64, window_secs: u64) {
+        self.rate_limit = Some((max_requests, window_secs.max(1)));
     }
 
     // Adds a WebSocket echo route at the given path. On upgrade, every text
@@ -355,6 +363,47 @@ impl WebServer {
                 _ => router,
             };
         }
+        // Rate limiting is applied last (outermost) so it governs all routes.
+        if let Some((max, window)) = self.rate_limit {
+            let state: Arc<Mutex<HashMap<String, (Instant, u64)>>> = Arc::new(Mutex::new(HashMap::new()));
+            let limit_max = max;
+            let limit_window = window;
+            router = router.layer(middleware::from_fn(
+                move |req: axum::extract::Request,
+                      next: Next| {
+                    let state = Arc::clone(&state);
+                    async move {
+                    let key = req
+                        .extensions()
+                        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                        .map(|ci| ci.0.ip().to_string())
+                        .unwrap_or_else(|| "global".to_string());
+                    let allowed = {
+                        let mut map = state.lock().unwrap();
+                        let entry = map.entry(key).or_insert((Instant::now(), 0u64));
+                        if entry.0.elapsed() >= Duration::from_secs(limit_window) {
+                            *entry = (Instant::now(), 1);
+                            true
+                        } else if entry.1 < limit_max {
+                            entry.1 += 1;
+                            true
+                        } else {
+                            false
+                        }
+                    };
+                    if !allowed {
+                        let mut resp = Response::new(axum::body::Body::from("429 Too Many Requests"));
+                        *resp.status_mut() = StatusCode::TOO_MANY_REQUESTS;
+                        resp.headers_mut().insert(
+                            header::RETRY_AFTER,
+                            HeaderValue::from_str(&limit_window.to_string()).unwrap_or(HeaderValue::from_static("60")),
+                        );
+                        return resp;
+                    }
+                    next.run(req).await
+                }
+            }));
+        }
 
         // Create a new runtime for the web server
         let rt = Runtime::new().map_err(|e| e.to_string())?;
@@ -366,7 +415,10 @@ impl WebServer {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            axum::serve(listener, router)
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
                 .with_graceful_shutdown(shutdown_signal(duration))
                 .await
                 .map_err(|e| e.to_string())?;

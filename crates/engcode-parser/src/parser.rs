@@ -63,6 +63,7 @@ impl Parser {
                     Some(Token::Identifier(name)) if name == "websocket" || name == "socket" => {
                         self.parse_add_websocket_route()
                     }
+                    Some(Token::Identifier(name)) if name == "rate" => self.parse_add_rate_limit(),
                     Some(Token::Toast) | Some(Token::Alert) | Some(Token::Spinner)
                     | Some(Token::Loading) | Some(Token::Modal)
                     | Some(Token::Tabs) | Some(Token::Accordion)
@@ -1806,6 +1807,52 @@ impl Parser {
         self.advance();
 
         Ok(Statement::AddWebSocketRoute { path })
+    }
+
+    // Parses: add rate limit [with] N requests per minute|second|hour
+    // e.g. "add rate limit 20 requests per minute"
+    fn parse_add_rate_limit(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        // consume "rate" (Identifier) and "limit" (Token::Limit)
+        if !matches!(self.current_token(), Token::Identifier(name) if name == "rate") {
+            return Err("Expected 'rate' after 'add'".to_string());
+        }
+        self.advance();
+        if !matches!(self.current_token(), Token::Limit) {
+            return Err("Expected 'limit' after 'rate'".to_string());
+        }
+        self.advance();
+
+        // Optional "with"
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+
+        let limit = match self.current_token() {
+            Token::Number(n) => {
+                let n = *n as u64;
+                self.advance();
+                n
+            }
+            _ => 100,
+        };
+
+        // Consume trailing words like "requests per minute|second|hour" and
+        // pick the window unit from them.
+        let mut window_secs = 60u64;
+        while matches!(self.current_token(), Token::Identifier(_)) {
+            if let Token::Identifier(word) = self.current_token() {
+                match word.as_str() {
+                    "second" => window_secs = 1,
+                    "hour" => window_secs = 3600,
+                    "minute" => window_secs = 60,
+                    _ => {}
+                }
+            }
+            self.advance();
+        }
+
+        Ok(Statement::AddRateLimit { limit, window_secs })
     }
 
     fn parse_add_ui_component(&mut self) -> Result<Statement, String> {

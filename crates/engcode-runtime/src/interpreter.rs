@@ -95,6 +95,9 @@ impl Interpreter {
                 self.execute_add_upload_route(path, directory)
             }
             Statement::AddWebSocketRoute { path } => self.execute_add_websocket_route(path),
+            Statement::AddRateLimit { limit, window_secs } => {
+                self.execute_add_rate_limit(limit, window_secs)
+            }
             Statement::AddUIComponent { component, text, title, items } => {
                 self.execute_add_ui_component(component, text, title, items)
             }
@@ -1098,6 +1101,27 @@ impl Interpreter {
                 "No layout created. Use 'create a layout called X' first.".to_string(),
             ))
         }
+    }
+
+    fn execute_add_rate_limit(&mut self, limit: u64, window_secs: u64) -> Result<(), RuntimeError> {
+        let server = self.context.take_web_server();
+        let mut server = match server {
+            Some(s) => s,
+            None => {
+                return Err(RuntimeError::TypeError(
+                    "No web server created. Use 'create a web server on port X' first.".to_string(),
+                ))
+            }
+        };
+        server.add_rate_limit(limit, window_secs);
+        self.context.set_web_server(server);
+        println!(
+            "  {} Rate limit: max {} requests per {} second(s)",
+            "→".cyan(),
+            limit.to_string().yellow(),
+            window_secs
+        );
+        Ok(())
     }
 
     fn execute_add_upload_route(&mut self, path: String, directory: String) -> Result<(), RuntimeError> {

@@ -83,6 +83,7 @@ impl SemanticAnalyzer {
             Statement::RenderLayout { .. } => Ok(()),
             Statement::AddUploadRoute { .. } => Ok(()),
             Statement::AddWebSocketRoute { .. } => Ok(()),
+            Statement::AddRateLimit { .. } => Ok(()),
             Statement::AddUIComponent { .. } => Ok(()),
             Statement::AddElement { .. } => Ok(()),
             Statement::AddButton { .. } => Ok(()),

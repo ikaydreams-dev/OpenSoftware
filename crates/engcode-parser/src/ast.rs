@@ -91,6 +91,10 @@ pub enum Statement {
     AddWebSocketRoute {
         path: String,
     },
+    AddRateLimit {
+        limit: u64,
+        window_secs: u64,
+    },
     AddUIComponent {
         component: String,  // "toast", "alert", "spinner", "modal", "tabs", "accordion", "container", "grid"
         text: String,
