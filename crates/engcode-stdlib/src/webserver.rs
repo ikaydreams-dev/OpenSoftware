@@ -60,6 +60,29 @@ impl WebServer {
         }
     }
 
+    // Adds a WebSocket echo route at the given path. On upgrade, every text
+    // message received is echoed back as "echo: <message>".
+    pub fn add_websocket_route(&mut self, path: &str) {
+        let route_path = path.to_string();
+        let handler = |socket: axum::extract::ws::WebSocketUpgrade| async move {
+            socket.on_upgrade(|mut socket| async move {
+                while let Some(Ok(msg)) = socket.recv().await {
+                    if let axum::extract::ws::Message::Text(text) = msg {
+                        let reply = format!("echo: {}", text);
+                        if socket
+                            .send(axum::extract::ws::Message::Text(reply.into()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+            })
+        };
+        self.router = self.router.clone().route(&route_path, get(handler));
+    }
+
     // Adds a multipart file upload route that saves uploaded files to a directory.
     pub fn add_upload_route(&mut self, path: &str, directory: &str) {
         let save_dir = directory.to_string();

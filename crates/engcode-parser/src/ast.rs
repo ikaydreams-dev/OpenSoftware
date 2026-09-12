@@ -88,6 +88,9 @@ pub enum Statement {
         path: String,
         directory: String,
     },
+    AddWebSocketRoute {
+        path: String,
+    },
     AddUIComponent {
         component: String,  // "toast", "alert", "spinner", "modal", "tabs", "accordion", "container", "grid"
         text: String,

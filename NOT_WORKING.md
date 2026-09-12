@@ -35,6 +35,9 @@ The following were previously listed as broken but are now tested end-to-end:
 20. **Word arithmetic** — `2 plus 3`, `10 minus 4`, `2 times 3`, `12 divided by 4` (and symbol forms `+ - * /`) all parse and evaluate
 21. **Test/assert framework** — `test "name" ... assert <cond> with message "..." ... end` runs, counts assertions, reports per-test results, and exits non-zero on failure (Category 5 now works)
 22. **File uploads** — `add upload route "/upload" to "dir"` accepts multipart POSTs, saves files, returns JSON; files are served from `/uploads/...`
+23. **Database joins** — `select all from A join B on A.key is B.key` does an inner join, merging matching rows (prefixed and bare field paths supported)
+24. **`is` as equality** — `where name is "bob"`, `if n is 5 then`, and join conditions now work (previously `Unexpected token: Is`)
+25. **WebSockets** — `add websocket route "/ws"` upgrades to a live WebSocket that echoes messages back
 
 ---
 
@@ -175,10 +178,13 @@ add onclick handler "alert('hi')" # Generates HTML but no JS
 
 **Status:** HTML + CSS + minimal JS (engcSubmit) only; no general client-side JS.
 
-### WebSockets - NOT IMPLEMENTED
+### WebSockets - ✅ DONE
 ```englishcode
-create websocket server on port 3001 # Not implemented
+add websocket route "/ws"
 ```
+
+GET upgrades to a WebSocket; every text message is echoed back as `echo: <message>`.
+Verified end-to-end with a real client (sends "hello from node", receives `echo: hello from node`).
 
 
 ### GraphQL - NOT IMPLEMENTED

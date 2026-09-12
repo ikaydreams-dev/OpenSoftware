@@ -94,6 +94,7 @@ impl Interpreter {
             Statement::AddUploadRoute { path, directory } => {
                 self.execute_add_upload_route(path, directory)
             }
+            Statement::AddWebSocketRoute { path } => self.execute_add_websocket_route(path),
             Statement::AddUIComponent { component, text, title, items } => {
                 self.execute_add_ui_component(component, text, title, items)
             }
@@ -1112,6 +1113,22 @@ impl Interpreter {
         server.add_upload_route(&path, &directory);
         self.context.set_web_server(server);
         println!("  {} Added upload route {} to {}", "→".cyan(), path.cyan(), directory.magenta());
+        Ok(())
+    }
+
+    fn execute_add_websocket_route(&mut self, path: String) -> Result<(), RuntimeError> {
+        let server = self.context.take_web_server();
+        let mut server = match server {
+            Some(s) => s,
+            None => {
+                return Err(RuntimeError::TypeError(
+                    "No web server created. Use 'create a web server on port X' first.".to_string(),
+                ))
+            }
+        };
+        server.add_websocket_route(&path);
+        self.context.set_web_server(server);
+        println!("  {} Added WebSocket route {}", "→".cyan(), path.cyan());
         Ok(())
     }
 

@@ -59,6 +59,10 @@ impl Parser {
                     Some(Token::Style) => self.parse_add_css(),
                     Some(Token::Identifier(name)) if name == "css" => self.parse_add_css(),
                     Some(Token::Upload) => self.parse_add_upload_route(),
+                    Some(Token::WebSocket) => self.parse_add_websocket_route(),
+                    Some(Token::Identifier(name)) if name == "websocket" || name == "socket" => {
+                        self.parse_add_websocket_route()
+                    }
                     Some(Token::Toast) | Some(Token::Alert) | Some(Token::Spinner)
                     | Some(Token::Loading) | Some(Token::Modal)
                     | Some(Token::Tabs) | Some(Token::Accordion)
@@ -1785,6 +1789,25 @@ impl Parser {
         Ok(Statement::AddUploadRoute { path, directory })
     }
 
+    fn parse_add_websocket_route(&mut self) -> Result<Statement, String> {
+        self.advance(); // consume "add"
+        self.advance(); // consume "websocket"
+
+        // Skip optional "route" / "endpoint"
+        if matches!(self.current_token(), Token::Route | Token::Endpoint) {
+            self.advance();
+        }
+
+        // Get path in quotes
+        let path = match self.current_token() {
+            Token::String(s) => s.clone(),
+            _ => return Err("Expected websocket route path in quotes".to_string()),
+        };
+        self.advance();
+
+        Ok(Statement::AddWebSocketRoute { path })
+    }
+
     fn parse_add_ui_component(&mut self) -> Result<Statement, String> {
         self.advance(); // consume "add"
 
@@ -2865,6 +2888,21 @@ match &program.statements[0] {
                 assert_eq!(properties[1], ("method".to_string(), Expression::String("post".to_string())));
             }
             _ => panic!("Expected AddForm"),
+        }
+    }
+
+    #[test]
+    fn test_parse_add_websocket_route() {
+        let source = r#"add websocket route "/ws""#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        match &program.statements[0] {
+            Statement::AddWebSocketRoute { path } => {
+                assert_eq!(path, "/ws");
+            }
+            _ => panic!("Expected AddWebSocketRoute"),
         }
     }
 
