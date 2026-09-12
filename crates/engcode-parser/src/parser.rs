@@ -1,4 +1,4 @@
-use crate::ast::{Program, Statement, Expression, UnaryOperator, BinaryOperator};
+use crate::ast::{Program, Statement, Expression, UnaryOperator, BinaryOperator, JoinClause};
 use engcode_lexer::Token;
 
 pub struct Parser {
@@ -1111,10 +1111,32 @@ impl Parser {
             None
         };
 
+        // Parse optional JOIN clause: join <collection> on <bool expression>
+        let join = if matches!(self.current_token(), Token::Join) {
+            self.advance(); // consume 'join'
+            let collection = match self.current_token() {
+                Token::Identifier(name) => name.clone(),
+                _ => return Err("Expected joined collection name after 'join'".to_string()),
+            };
+            self.advance();
+            if !matches!(self.current_token(), Token::On) {
+                return Err("Expected 'on' after join collection name".to_string());
+            }
+            self.advance();
+            let join_condition = Some(self.parse_comparison_expression()?);
+            Some(JoinClause {
+                collection,
+                condition: join_condition,
+            })
+        } else {
+            None
+        };
+
         Ok(Statement::Select {
             collection,
             fields: vec![],
             condition,
+            join,
         })
     }
 
@@ -2109,6 +2131,10 @@ impl Parser {
                 self.advance();
                 BinaryOperator::EqualTo
             }
+            Token::Is | Token::Equals => {
+                self.advance();
+                BinaryOperator::EqualTo
+            }
             Token::NotEqualTo => {
                 self.advance();
                 BinaryOperator::NotEqualTo
@@ -2736,6 +2762,76 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_select_with_join() {
+        let source = r#"select all from orders join customers on orders.customerid is customers.id"#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            Statement::Select { collection, join, condition: None, .. } => {
+                assert_eq!(collection, "orders");
+                let j = join.as_ref().expect("Expected join clause");
+                assert_eq!(j.collection, "customers");
+                let cond = j.condition.as_ref().expect("Expected join condition");
+                match cond {
+                    Expression::BinaryOp { left, operator, right } => {
+                        assert_eq!(*operator, crate::ast::BinaryOperator::EqualTo);
+                        assert!(matches!(**left, Expression::PropertyAccess { .. }));
+                        assert!(matches!(**right, Expression::PropertyAccess { .. }));
+                    }
+                    _ => panic!("Expected BinaryOp join condition"),
+                }
+            }
+            _ => panic!("Expected Select with join"),
+        }
+    }
+
+    #[test]
+    fn test_parse_word_arithmetic() {
+        use crate::ast::BinaryOperator;
+        let source = r#"set n to 2 plus 3 times 4"#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        assert_eq!(program.statements.len(), 1);
+match &program.statements[0] {
+            Statement::Assignment { value, .. } => {
+                if let Expression::BinaryOp { operator, right, .. } = value {
+                    // 2 plus (3 times 4): outer Add, right side Multiply
+                    assert_eq!(operator, &BinaryOperator::Add);
+                    if let Expression::BinaryOp { operator, .. } = &**right {
+                        assert_eq!(operator, &BinaryOperator::Multiply);
+                    } else {
+                        panic!("Expected Multiply as right side");
+                    }
+                } else {
+                    panic!("Expected nested BinaryOp");
+                }
+            }
+            _ => panic!("Expected Assignment"),
+        }
+    }
+
+    #[test]
+    fn test_parse_assert_with_message() {
+        let source = r#"assert 2 plus 3 equalto 5 with message "oops""#;
+        let mut lexer = engcode_lexer::Lexer::new(source.to_string());
+        let tokens = lexer.tokenize_with_positions().into_iter().map(|t| t.token).collect();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().unwrap();
+        match &program.statements[0] {
+            Statement::Assert { message, condition } => {
+                assert_eq!(message, &Some("oops".to_string()));
+                assert!(matches!(condition, Expression::BinaryOp { .. }));
+            }
+            _ => panic!("Expected Assert"),
+        }
+    }
 
     #[test]
     fn test_parse_set_style() {

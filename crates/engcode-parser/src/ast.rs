@@ -30,6 +30,7 @@ pub enum Statement {
         collection: String,
         fields: Vec<String>, // empty means all
         condition: Option<Expression>,
+        join: Option<JoinClause>,
     },
     Update {
         collection: String,
@@ -259,6 +260,14 @@ pub enum Expression {
         object: Box<Expression>,
         property: String,
     },
+}
+
+// An inner JOIN between two collections on a boolean condition.
+// e.g. select all from orders join customers on orders.customerid is customers.id
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinClause {
+    pub collection: String,
+    pub condition: Option<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

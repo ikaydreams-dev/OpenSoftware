@@ -1,6 +1,6 @@
 use colored::*;
 use engcode_parser::{Program, Statement, Expression};
-use engcode_parser::ast::ValidationRule;
+use engcode_parser::ast::{ValidationRule, JoinClause};
 use crate::context::ExecutionContext;
 use crate::error::RuntimeError;
 use crate::value::{Value, value_from_json, value_to_json};
@@ -48,9 +48,12 @@ impl Interpreter {
             Statement::InsertRaw { collection, value } => {
                 self.execute_insert_raw(collection, value)
             }
-            Statement::Select { collection, fields, condition } => {
-                self.execute_select(collection, fields, condition)
-            }
+            Statement::Select {
+                collection,
+                fields,
+                condition,
+                join,
+            } => self.execute_select(collection, fields, condition, join),
             Statement::Update { collection, data, condition } => {
                 self.execute_update(collection, data, condition)
             }
@@ -446,27 +449,171 @@ impl Interpreter {
         collection: String,
         _fields: Vec<String>,
         condition: Option<Expression>,
+        join: Option<JoinClause>,
     ) -> Result<(), RuntimeError> {
         let db_name = self.context.current_database()
             .ok_or(RuntimeError::NoDatabaseContext)?;
 
-        let db = self.context.get_database_mut(&db_name)
-            .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
-
-        let mut rows = engcode_stdlib::database::select_all(db, &collection)?;
+        let mut rows = {
+            let db = self.context.get_database_mut(&db_name)
+                .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
+            engcode_stdlib::database::select_all(db, &collection)?
+        };
 
         // Filter by WHERE condition if present
         if let Some(cond) = condition {
             rows = self.filter_rows(rows, &cond)?;
         }
 
+        let right_rows = match &join {
+            Some(j) => {
+                let db = self.context.get_database_mut(&db_name)
+                    .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
+                engcode_stdlib::database::select_all(db, &j.collection)?
+            }
+            None => Vec::new(),
+        };
+
+        // Inner join with another collection if requested
+        if let Some(j) = &join {
+            let mut merged = Vec::new();
+            for left in rows {
+                let left_json: serde_json::Value = serde_json::from_str(&left)
+                    .map_err(|e| RuntimeError::TypeError(format!("Failed to parse row: {}", e)))?;
+                for right in &right_rows {
+                    let right_json: serde_json::Value = serde_json::from_str(right)
+                        .map_err(|e| RuntimeError::TypeError(format!("Failed to parse row: {}", e)))?;
+                    let matches = match &j.condition {
+                        Some(cond) => self.evaluate_join_condition(
+                            &left_json,
+                            &right_json,
+                            &collection,
+                            &j.collection,
+                            cond,
+                        )?,
+                        None => true,
+                    };
+                    if matches {
+                        let mut merged_obj = left_json.clone();
+                        if let (serde_json::Value::Object(a), serde_json::Value::Object(b)) =
+                            (&mut merged_obj, &right_json)
+                        {
+                            for (k, v) in b {
+                                if !a.contains_key(k) {
+                                    a.insert(k.clone(), v.clone());
+                                }
+                            }
+                        }
+                        merged.push(serde_json::to_string(&merged_obj)
+                            .map_err(|e| RuntimeError::TypeError(format!("Failed to serialize row: {}", e)))?);
+                    }
+                }
+            }
+            rows = merged;
+        }
+
         println!("\n{} Found {} rows in {}:", "→".cyan(), rows.len(), collection.cyan());
+        if let Some(j) = &join {
+            println!("  {} joined with {}:", "↪".cyan(), j.collection.cyan());
+        }
         for (i, row) in rows.iter().enumerate() {
             println!("  {}. {}", i + 1, row);
         }
         println!();
 
         Ok(())
+    }
+
+    // Evaluates a join condition against a pair of row objects. Field paths
+    // like `orders.customerid` resolve to the left/right row by name; bare
+    // identifiers are looked up in the left row first, then the right row.
+    fn evaluate_join_condition(
+        &mut self,
+        left: &serde_json::Value,
+        right: &serde_json::Value,
+        left_name: &str,
+        right_name: &str,
+        condition: &Expression,
+    ) -> Result<bool, RuntimeError> {
+        use engcode_parser::ast::BinaryOperator;
+
+        let mut resolve = |expr: &Expression| -> Result<Value, RuntimeError> {
+            match expr {
+                Expression::Identifier(field) => {
+                    // Prefer the left row, then the right row.
+                    for row in [&left, &right] {
+                        if let Some(v) = row.get(field) {
+                            return Ok(match v {
+                                serde_json::Value::String(s) => Value::String(s.clone()),
+                                serde_json::Value::Number(n) => Value::Number(n.as_f64().unwrap_or(0.0)),
+                                serde_json::Value::Bool(b) => Value::Boolean(*b),
+                                serde_json::Value::Null => Value::Null,
+                                _ => Value::Null,
+                            });
+                        }
+                    }
+                    Ok(Value::Null)
+                }
+                Expression::PropertyAccess { object, property } => {
+                    if let Expression::Identifier(base) = object.as_ref() {
+                        let row = if base == left_name { &left } else { &right };
+                        let v = row.get(property);
+                        Ok(match v {
+                            Some(serde_json::Value::String(s)) => Value::String(s.clone()),
+                            Some(serde_json::Value::Number(n)) => Value::Number(n.as_f64().unwrap_or(0.0)),
+                            Some(serde_json::Value::Bool(b)) => Value::Boolean(*b),
+                            Some(serde_json::Value::Null) | None => Value::Null,
+                            _ => Value::Null,
+                        })
+                    } else {
+                        self.evaluate_expression(expr.clone())
+                    }
+                }
+                _ => self.evaluate_expression(expr.clone()),
+            }
+        };
+
+        match condition {
+            Expression::BinaryOp { left: l, operator: op, right: r } => {
+                let lv = resolve(l)?;
+                let rv = resolve(r)?;
+                let result = match op {
+                    BinaryOperator::EqualTo => match (&lv, &rv) {
+                        (Value::Number(a), Value::Number(b)) => a == b,
+                        (Value::String(a), Value::String(b)) => a == b,
+                        (Value::Boolean(a), Value::Boolean(b)) => a == b,
+                        _ => false,
+                    },
+                    BinaryOperator::NotEqualTo => match (&lv, &rv) {
+                        (Value::Number(a), Value::Number(b)) => a != b,
+                        (Value::String(a), Value::String(b)) => a != b,
+                        (Value::Boolean(a), Value::Boolean(b)) => a != b,
+                        _ => true,
+                    },
+                    BinaryOperator::GreaterThan => match (&lv, &rv) {
+                        (Value::Number(a), Value::Number(b)) => a > b,
+                        _ => false,
+                    },
+                    BinaryOperator::LessThan => match (&lv, &rv) {
+                        (Value::Number(a), Value::Number(b)) => a < b,
+                        _ => false,
+                    },
+                    BinaryOperator::GreaterThanOrEqual => match (&lv, &rv) {
+                        (Value::Number(a), Value::Number(b)) => a >= b,
+                        _ => false,
+                    },
+                    BinaryOperator::LessThanOrEqual => match (&lv, &rv) {
+                        (Value::Number(a), Value::Number(b)) => a <= b,
+                        _ => false,
+                    },
+                    BinaryOperator::And => lv.is_truthy() && rv.is_truthy(),
+                    BinaryOperator::Or => lv.is_truthy() || rv.is_truthy(),
+                    _ => false,
+                };
+                Ok(result)
+            }
+            _ => Ok(self.evaluate_expression(condition.clone())?.is_truthy()),
+        }
     }
 
     fn filter_rows(&mut self, rows: Vec<String>, condition: &Expression) -> Result<Vec<String>, RuntimeError> {
