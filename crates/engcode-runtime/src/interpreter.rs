@@ -1911,12 +1911,19 @@ impl Interpreter {
     fn execute_test_block(&mut self, name: String, body: Vec<Statement>) -> Result<(), RuntimeError> {
         println!("\n{} {}", "Testing:".bold().cyan(), name.bold());
 
+        // Count how many assertions this test contains so the summary reflects
+        // actual assertions rather than every statement (set/show/etc).
         let mut passed = 0;
         let mut failed = 0;
 
         for stmt in body {
+            let is_assert = matches!(stmt, Statement::Assert { .. });
             match self.execute_statement(stmt) {
-                Ok(_) => passed += 1,
+                Ok(_) => {
+                    if is_assert {
+                        passed += 1;
+                    }
+                }
                 Err(e) => {
                     failed += 1;
                     println!("  {} {}", "✗".red(), e);
@@ -1925,12 +1932,16 @@ impl Interpreter {
         }
 
         if failed == 0 {
-            println!("{} {} tests passed", "✓".green().bold(), passed);
+            println!("{} {} assertion{} passed", "✓".green().bold(), passed, if passed == 1 { "" } else { "s" });
         } else {
             println!("{} {} passed, {} failed", "!".yellow().bold(), passed, failed);
         }
 
-        Ok(())
+        if failed > 0 {
+            Err(RuntimeError::TestFailed(format!("Test '{name}' had {failed} failing assertion(s)")))
+        } else {
+            Ok(())
+        }
     }
 
     fn execute_assert(&mut self, condition: Expression, message: Option<String>) -> Result<(), RuntimeError> {

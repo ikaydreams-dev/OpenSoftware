@@ -282,7 +282,8 @@ pub enum Token {
     GreaterThanOrEqual,
     LessThanOrEqual,
     Or,
-    Not,
+Not,
+    Message,
 
     // Literals
     String(String),
@@ -298,6 +299,7 @@ pub enum Token {
     Plus,
     Star,
     Slash,
+    By,
     Colon,
     LeftBracket,
     RightBracket,
@@ -362,6 +364,7 @@ impl Token {
             "email" => Token::Email,
             "password" => Token::Password,
             "session" => Token::Session,
+            "message" => Token::Message,
             "token" => Token::Token,
             // Testing
             "test" => Token::Test,
@@ -505,6 +508,10 @@ impl Token {
             "for" => Token::For,
             "each" => Token::Each,
             "times" => Token::Times,
+            "plus" => Token::Plus,
+            "minus" => Token::Minus,
+            "divided" => Token::Slash,
+            "by" => Token::By,
             "repeat" => Token::Repeat,
             "until" => Token::Until,
             "break" => Token::Break,

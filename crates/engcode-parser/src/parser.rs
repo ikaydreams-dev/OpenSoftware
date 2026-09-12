@@ -367,6 +367,7 @@ impl Parser {
             Token::Called => Some("called".to_string()),
             Token::Port => Some("port".to_string()),
             Token::Server => Some("server".to_string()),
+            Token::Message => Some("message".to_string()),
             Token::Database => Some("database".to_string()),
             Token::User => Some("user".to_string()),
             Token::Email => Some("email".to_string()),
@@ -762,15 +763,19 @@ impl Parser {
     fn parse_term(&mut self) -> Result<Expression, String> {
         let mut expr = self.parse_postfix_expression()?;
 
-        // Handle * and /
+        // Handle *, /, times, divided by
         loop {
             let operator = match self.current_token() {
-                Token::Star => BinaryOperator::Multiply,
+                Token::Star | Token::Times => BinaryOperator::Multiply,
                 Token::Slash => BinaryOperator::Divide,
                 _ => break,
             };
 
             self.advance();
+            // "divided by N" — skip the optional "by"
+            if matches!(self.current_token(), Token::By) {
+                self.advance();
+            }
             let right = self.parse_postfix_expression()?;
             expr = Expression::BinaryOp {
                 left: Box::new(expr),
@@ -2640,8 +2645,18 @@ impl Parser {
         // Parse condition
         let condition = self.parse_comparison_expression()?;
 
-        // Optional message
-        let message = None; // Could parse "with message" later
+        // Optional "with message '...'" or "message '...'"
+        let mut message = None;
+        if matches!(self.current_token(), Token::With) {
+            self.advance();
+        }
+        if matches!(self.current_token(), Token::Message) {
+            self.advance();
+            if let Token::String(s) = self.current_token() {
+                message = Some(s.clone());
+                self.advance();
+            }
+        }
 
         Ok(Statement::Assert { condition, message })
     }
