@@ -32,6 +32,9 @@ The following were previously listed as broken but are now tested end-to-end:
 17. **CORS & Logging middleware** — `add middleware cors` adds `Access-Control-Allow-*` headers to all responses (including OPTIONS preflight); `add middleware logging` logs `[engcode] METHOD /path -> STATUS (Nms)`; middleware is applied at server start so routes added after are covered
 18. **Mobile navigation** — `navigate to page "profile"` and `go back` transpile to React Navigation's `navigation.navigate`/`navigation.goBack`; E2E build with React Navigation dependencies verified
 19. **Mobile data fetching** — `fetch data from "url"` transpiles to React `fetch` + `.then(data => setState(data))`; verified in E2E mobile build
+20. **Word arithmetic** — `2 plus 3`, `10 minus 4`, `2 times 3`, `12 divided by 4` (and symbol forms `+ - * /`) all parse and evaluate
+21. **Test/assert framework** — `test "name" ... assert <cond> with message "..." ... end` runs, counts assertions, reports per-test results, and exits non-zero on failure (Category 5 now works)
+22. **File uploads** — `add upload route "/upload" to "dir"` accepts multipart POSTs, saves files, returns JSON; files are served from `/uploads/...`
 
 ---
 
@@ -181,8 +184,14 @@ create websocket server on port 3001 # Not implemented
 ### GraphQL - NOT IMPLEMENTED
 **Status:** REST/JSON routes only.
 
-### File Uploads - NOT IMPLEMENTED
-**Status:** No multipart form handling.
+### File Uploads - ✅ DONE
+```englishcode
+add upload route "/upload" to "public/uploads"
+```
+
+Multipart `POST` to the route saves each part to the target directory and returns
+`{"uploaded":[{"filename":"note.txt","size":13,"path":"public/uploads/note.txt"}],"status":201}`.
+Uploaded files are served back from `/uploads/...`.
 
 ### HTTP Cookies - ✅ DONE (basic)
 ```englishcode
@@ -206,17 +215,17 @@ so routes added after `add middleware` are correctly covered.
 
 ---
 
-## CATEGORY 5: Testing (0% Done as a Framework)
+## CATEGORY 5: Testing - ✅ VERIFIED WORKING
 
 ```englishcode
-
 test "addition works"
  assert 2 plus 2 equalto 4
 end
 ```
 
-**Status:** Rust unit tests (59 passing) cover the engine, but there's no
-EnglishCode-level test/assert framework yet.
+**Status:** `test`/`assert`/`expect` work with optional `with message "..."`;
+assertion counts are per-test and the process exits non-zero when a test fails.
+Rust unit tests (59 passing) also cover the engine.
 
 ---
 
