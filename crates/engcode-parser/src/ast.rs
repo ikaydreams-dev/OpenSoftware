@@ -98,6 +98,8 @@ pub enum Statement {
     BeginTransaction,
     CommitTransaction,
     RollbackTransaction,
+    BackupDatabase { target: String },
+    RestoreDatabase { source: String },
     AddUIComponent {
         component: String,  // "toast", "alert", "spinner", "modal", "tabs", "accordion", "container", "grid"
         text: String,

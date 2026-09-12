@@ -209,6 +209,59 @@ impl Database {
         self.connection.execute("ROLLBACK", [])?;
         Ok(())
     }
+
+    // Writes a full snapshot of the database to the given file path.
+    pub fn backup_to(&self, target: &str) -> Result<(), DatabaseError> {
+        let sql = format!("VACUUM INTO '{}'", target.replace('\'', "''"));
+        self.connection.execute_batch(&sql)?;
+        Ok(())
+    }
+
+    // Replaces the contents of every collection in this database with the data
+    // from a backup file (created with backup_to / VACUUM INTO).
+    pub fn restore_from(&mut self, source: &str) -> Result<(), DatabaseError> {
+        let esc = source.replace('\'', "''");
+        self.connection.execute_batch(&format!("ATTACH DATABASE '{}' AS backupdb", esc))?;
+
+        let tables: Vec<String> = {
+            let mut stmt = self
+                .connection
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")?;
+            let t = stmt
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<Vec<String>>>()?;
+            drop(stmt);
+            t
+        };
+
+        let mut failed: Option<DatabaseError> = None;
+        for table in &tables {
+            if let Err(e) = self.restore_table(table) {
+                failed = Some(e);
+                break;
+            }
+        }
+
+        let _ = self.connection.execute_batch("DETACH DATABASE backupdb");
+        match failed {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    fn restore_table(&mut self, table: &str) -> Result<(), DatabaseError> {
+        let t = sanitize_table_name(table);
+        self.connection.execute(&format!("DELETE FROM {}", t), [])?;
+        self.connection.execute_batch(&format!(
+            "INSERT INTO {} (data) SELECT data FROM backupdb.{}",
+            t, t
+        ))?;
+        self.connection.execute_batch(&format!(
+            "DELETE FROM sqlite_sequence WHERE name = '{}'",
+            t
+        ))?;
+        Ok(())
+    }
 }
 
 // Sanitize table name to prevent SQL injection
@@ -282,6 +335,14 @@ pub fn commit_transaction(db: &mut Database) -> Result<(), DatabaseError> {
 
 pub fn rollback_transaction(db: &mut Database) -> Result<(), DatabaseError> {
     db.rollback_transaction()
+}
+
+pub fn backup_to(db: &Database, target: &str) -> Result<(), DatabaseError> {
+    db.backup_to(target)
+}
+
+pub fn restore_from(db: &mut Database, source: &str) -> Result<(), DatabaseError> {
+    db.restore_from(source)
 }
 
 pub fn query_data(db: &Database, collection: &str, condition: &str) -> Result<Vec<String>, DatabaseError> {

@@ -39,6 +39,10 @@ impl ExecutionContext {
         self.databases.get_mut(name)
     }
 
+    pub fn get_database(&self, name: &str) -> Option<&Database> {
+        self.databases.get(name)
+    }
+
     pub fn set_current_database(&mut self, name: Option<String>) {
         self.current_database = name;
     }

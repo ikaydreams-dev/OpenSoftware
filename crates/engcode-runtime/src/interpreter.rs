@@ -101,6 +101,8 @@ impl Interpreter {
             Statement::BeginTransaction => self.execute_transaction("begin"),
             Statement::CommitTransaction => self.execute_transaction("commit"),
             Statement::RollbackTransaction => self.execute_transaction("rollback"),
+            Statement::BackupDatabase { target } => self.execute_backup(&target),
+            Statement::RestoreDatabase { source } => self.execute_restore(&source),
             Statement::AddUIComponent { component, text, title, items } => {
                 self.execute_add_ui_component(component, text, title, items)
             }
@@ -1104,6 +1106,26 @@ impl Interpreter {
                 "No layout created. Use 'create a layout called X' first.".to_string(),
             ))
         }
+    }
+
+    fn execute_backup(&mut self, target: &str) -> Result<(), RuntimeError> {
+        let db_name = self.context.current_database()
+            .ok_or(RuntimeError::NoDatabaseContext)?;
+        let db = self.context.get_database(&db_name)
+            .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
+        engcode_stdlib::database::backup_to(db, target)?;
+        println!("  {} Database backed up to \"{}\"", "✓".green(), target);
+        Ok(())
+    }
+
+    fn execute_restore(&mut self, source: &str) -> Result<(), RuntimeError> {
+        let db_name = self.context.current_database()
+            .ok_or(RuntimeError::NoDatabaseContext)?;
+        let db = self.context.get_database_mut(&db_name)
+            .ok_or_else(|| RuntimeError::DatabaseNotFound(db_name.clone()))?;
+        engcode_stdlib::database::restore_from(db, source)?;
+        println!("  {} Database restored from \"{}\"", "→".yellow(), source);
+        Ok(())
     }
 
     fn execute_transaction(&mut self, op: &str) -> Result<(), RuntimeError> {

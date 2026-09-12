@@ -113,6 +113,8 @@ impl Parser {
                 self.advance();
                 Ok(Statement::RollbackTransaction)
             }
+            Token::Backup => self.parse_backup(),
+            Token::Restore => self.parse_restore(),
             Token::Read => self.parse_read_file(),
             Token::Write => self.parse_write_file(),
             Token::Append => self.parse_append_file(),
@@ -2718,6 +2720,54 @@ impl Parser {
             self.advance();
         }
         Ok(Statement::BeginTransaction)
+    }
+
+    // backup [database called "x"] to "path"
+    fn parse_backup(&mut self) -> Result<Statement, String> {
+        self.consume(&Token::Backup)?;
+        if matches!(self.current_token(), Token::Database | Token::DB) {
+            self.advance();
+            if matches!(self.current_token(), Token::Called) {
+                self.advance();
+            }
+            if let Token::String(s) = self.current_token() {
+                self.current_database = Some(s.clone());
+                self.advance();
+            }
+        }
+        if matches!(self.current_token(), Token::To | Token::Into) {
+            self.advance();
+        }
+        let target = match self.current_token() {
+            Token::String(s) => s.clone(),
+            _ => return Err("Expected backup file path in quotes after 'backup'. Try: backup database to \"backup.db\"".to_string()),
+        };
+        self.advance();
+        Ok(Statement::BackupDatabase { target })
+    }
+
+    // restore [database called "x"] from "path"
+    fn parse_restore(&mut self) -> Result<Statement, String> {
+        self.consume(&Token::Restore)?;
+        if matches!(self.current_token(), Token::Database | Token::DB) {
+            self.advance();
+            if matches!(self.current_token(), Token::Called) {
+                self.advance();
+            }
+            if let Token::String(s) = self.current_token() {
+                self.current_database = Some(s.clone());
+                self.advance();
+            }
+        }
+        if matches!(self.current_token(), Token::From) {
+            self.advance();
+        }
+        let source = match self.current_token() {
+            Token::String(s) => s.clone(),
+            _ => return Err("Expected backup file path in quotes after 'restore'. Try: restore database from \"backup.db\"".to_string()),
+        };
+        self.advance();
+        Ok(Statement::RestoreDatabase { source })
     }
 
     fn parse_test_block(&mut self) -> Result<Statement, String> {

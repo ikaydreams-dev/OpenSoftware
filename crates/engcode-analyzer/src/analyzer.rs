@@ -85,6 +85,8 @@ impl SemanticAnalyzer {
             Statement::AddWebSocketRoute { .. } => Ok(()),
             Statement::AddRateLimit { .. } => Ok(()),
             Statement::BeginTransaction | Statement::CommitTransaction | Statement::RollbackTransaction => Ok(()),
+            Statement::BackupDatabase { .. } => Ok(()),
+            Statement::RestoreDatabase { .. } => Ok(()),
             Statement::AddUIComponent { .. } => Ok(()),
             Statement::AddElement { .. } => Ok(()),
             Statement::AddButton { .. } => Ok(()),
